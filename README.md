@@ -84,7 +84,10 @@ function App() {
   return (
     // 3. Render the stage and define your elements
     <Stage
-      class="w-full h-[600px] border rounded-lg"
+      style={{
+        width: '100vw',
+        height: '100vh',
+      }}
       stage={stage}
       components={{
         elements: {
