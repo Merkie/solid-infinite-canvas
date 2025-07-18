@@ -25,7 +25,7 @@ const preset_options: preset.PresetOptions = {
   drop_console: true,
 }
 
-// ... the rest of your file remains the same ...
+// The rest of your file remains the same...
 const CI =
   process.env['CI'] === 'true' ||
   process.env['GITHUB_ACTIONS'] === 'true' ||
