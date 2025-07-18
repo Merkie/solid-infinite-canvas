@@ -2,6 +2,7 @@ import { onMount } from 'solid-js'
 import {
   CanvasElementComponent,
   createStageContext,
+  ElementConnectionPoint,
   ElementTransformControls,
   Stage,
   useStage,
@@ -42,6 +43,8 @@ const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
           {element.props.count}
         </div>
       </div>
+      <ElementConnectionPoint elementId={elementId} type="input" />
+      <ElementConnectionPoint elementId={elementId} type="output" />
       <ElementTransformControls elementId={elementId} />
     </>
   )
@@ -85,6 +88,8 @@ const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
           {element.props.color}
         </div>
       </div>
+      <ElementConnectionPoint elementId={elementId} type="input" />
+      <ElementConnectionPoint elementId={elementId} type="output" />
       <ElementTransformControls elementId={elementId} />
     </>
   )

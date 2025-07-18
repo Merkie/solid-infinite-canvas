@@ -117,12 +117,21 @@ type ElementState = {
   props: Record<string, any>
 }
 
+// NEW: Type for a connection wire
+type ConnectionWire = {
+  id: string
+  fromElementId: string
+  toElementId: string
+}
+
 type UncreatedElementState = Omit<ElementState, 'rect'> & {
   rect: Omit<ElementState['rect'], 'zIndex'>
 }
 
 type StageState = {
   elements: Record<string, ElementState>
+  // NEW: State for connection wires
+  connectionWires: Record<string, ConnectionWire>
   cursors: Record<string, { x: number; y: number }>
   selectionBoxes: Record<
     string,
@@ -135,6 +144,8 @@ type DragTarget = {
   type: string
   initialRects?: Map<string, ElementState['rect']>
   elementId?: string
+  // NEW: Property to identify connection drag type
+  connectionType?: 'input' | 'output'
   resizeDir?: string
   initialRect?: ElementState['rect']
 }
@@ -190,6 +201,21 @@ type StageComponents = {
 }
 
 type CreateStageActions = (stage: StageContextWithoutActions) => StageActions
+
+// --- UTILITY FUNCTIONS ---
+/**
+ * Creates an SVG path string for an S-shaped curve.
+ * @param x1 - Start X coordinate
+ * @param y1 - Start Y coordinate
+ * @param x2 - End X coordinate
+ * @param y2 - End Y coordinate
+ * @returns The SVG path data string.
+ */
+function createSCurvePath(x1: number, y1: number, x2: number, y2: number): string {
+  const horizontalDistance = Math.abs(x1 - x2)
+  const handleOffset = Math.max(50, horizontalDistance * 0.4)
+  return `M ${x1} ${y1} C ${x1 + handleOffset} ${y1}, ${x2 - handleOffset} ${y2}, ${x2} ${y2}`
+}
 
 const createStageActions: CreateStageActions = (stage: StageContextWithoutActions) => {
   const createElement: StageActions['createElement'] = element => {
@@ -331,6 +357,8 @@ const createStageActions: CreateStageActions = (stage: StageContextWithoutAction
 export const createStageContext: CreateStageContext = () => {
   const [state, setState] = createStore<StageState>({
     elements: {},
+    // NEW: Initialize connectionWires
+    connectionWires: {},
     cursors: {},
     selectionBoxes: {},
     selectedElements: {},
@@ -396,6 +424,21 @@ export const Stage: Component<{
   )
 }
 
+function getConnectionPointCoords(
+  elementId: string,
+  type: 'input' | 'output',
+): { x: number; y: number } | null {
+  const { state } = useStage()
+
+  const element = state.elements[elementId]
+  if (!element) return null
+
+  const x = element.rect.x + (type === 'input' ? 0 : element.rect.width)
+  const y = element.rect.y + element.rect.height / 2
+
+  return { x, y }
+}
+
 function StageCanvas(props: { components: StageComponents }) {
   const {
     state,
@@ -430,6 +473,8 @@ function StageCanvas(props: { components: StageComponents }) {
     return 'default'
   }
 
+  // NEW: Helper to get world coordinates of a connection point
+
   function onMouseDown(event: MouseEvent) {
     const { x: stageX, y: stageY } = getStageCoordinates(event)
 
@@ -443,9 +488,23 @@ function StageCanvas(props: { components: StageComponents }) {
     const elementDiv = target.closest('[data-element-id]') as unknown as HTMLElement | null
     const elementIdAttr = elementDiv?.dataset.elementId
     const resizeDir = target.dataset.resizeDir
+    // NEW: Check for connection point clicks
+    const connectionType = target.dataset.connectionPoint as 'input' | 'output' | undefined
 
-    // Case 1: A resize handle was clicked
-    if (resizeDir && elementIdAttr && state.elements[elementIdAttr]) {
+    // Case 0: A connection point was clicked
+    if (connectionType && elementIdAttr && state.elements[elementIdAttr]) {
+      event.stopPropagation()
+      setDragStart({
+        stageX,
+        stageY,
+        target: {
+          type: 'connection',
+          elementId: elementIdAttr,
+          connectionType: connectionType,
+        },
+      })
+      // Case 1: A resize handle was clicked
+    } else if (resizeDir && elementIdAttr && state.elements[elementIdAttr]) {
       event.stopPropagation()
       setDragStart({
         stageX,
@@ -524,6 +583,7 @@ function StageCanvas(props: { components: StageComponents }) {
     const dx = (stageX - dragStartValue.stageX) / currentCamera.zoom
     const dy = (stageY - dragStartValue.stageY) / currentCamera.zoom
 
+    // No changes needed here for connections, handled by reactive rendering
     if (dragStartValue.target.type === 'resize') {
       const { elementId, resizeDir, initialRect } = dragStartValue.target
       if (!elementId || !resizeDir || !initialRect) return
@@ -580,6 +640,42 @@ function StageCanvas(props: { components: StageComponents }) {
 
   function onWindowMouseUp(event: MouseEvent) {
     if (event.button === 1 || panning()) setPanning(false)
+
+    const dragStartValue = dragStart()
+
+    // NEW: Logic for finishing a connection
+    if (dragStartValue?.target.type === 'connection') {
+      const { elementId: fromElementId, connectionType: fromType } = dragStartValue.target
+      const target = event.target as HTMLElement
+      const toElementId = target.closest('[data-element-id]')?.getAttribute('data-element-id')
+      const toType = target.dataset.connectionPoint as 'input' | 'output' | undefined
+
+      if (
+        toElementId &&
+        toType &&
+        fromElementId &&
+        fromType &&
+        fromElementId !== toElementId && // Can't connect to self
+        fromType !== toType // Must be opposite types
+      ) {
+        const newId = createId()
+        // Standardize: 'from' is always output, 'to' is always input
+        const from = fromType === 'output' ? fromElementId : toElementId
+        const to = fromType === 'input' ? fromElementId : toElementId
+
+        const alreadyExists = Object.values(state.connectionWires).some(
+          wire => wire.fromElementId === from && wire.toElementId === to,
+        )
+
+        if (!alreadyExists) {
+          setState('connectionWires', newId, {
+            id: newId,
+            fromElementId: from,
+            toElementId: to,
+          })
+        }
+      }
+    }
 
     const selectionBox = state.selectionBoxes[clientId]
     if (dragStart()?.target.type === 'stage' && selectionBox && !selectionBox.hidden) {
@@ -707,6 +803,8 @@ function StageCanvas(props: { components: StageComponents }) {
             ? getResizeCursor(dragStart()?.target.resizeDir)
             : panning()
             ? 'grabbing'
+            : dragStart()?.target.type === 'connection'
+            ? 'crosshair'
             : 'default',
       }}
     >
@@ -718,6 +816,38 @@ function StageCanvas(props: { components: StageComponents }) {
           transform: `translate(${camera().x}px, ${camera().y}px) scale(${camera().zoom})`,
         }}
       >
+        <svg
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            'pointer-events': 'none',
+            overflow: 'visible',
+          }}
+        >
+          {/* NEW: Render permanent connection wires */}
+          <For each={Object.values(state.connectionWires)}>
+            {wire => {
+              const fromCoords = () => getConnectionPointCoords(wire.fromElementId, 'output')
+              const toCoords = () => getConnectionPointCoords(wire.toElementId, 'input')
+              const path = () => {
+                const from = fromCoords()
+                const to = toCoords()
+                if (!from || !to) return ''
+                return createSCurvePath(from.x, from.y, to.x, to.y)
+              }
+              return <path d={path()} stroke="#64748b" stroke-width="2" fill="none" />
+            }}
+          </For>
+
+          {/* NEW: Render temporary wire while dragging */}
+          <Show when={dragStart()?.target.type === 'connection'}>
+            <ConnectionWireCursor />
+          </Show>
+        </svg>
+
         <For each={Object.entries(state.elements)}>
           {([id, element]) => (
             <div
@@ -759,6 +889,35 @@ function StageCanvas(props: { components: StageComponents }) {
       </div>
     </main>
   )
+}
+
+function ConnectionWireCursor() {
+  const { dragStart, mousePosition, camera } = useStage()
+
+  const dragInfo = dragStart()!.target
+  const currentCamera = camera()
+
+  const fromCoords = () => getConnectionPointCoords(dragInfo.elementId!, dragInfo.connectionType!)
+
+  const worldMouseX = () => (mousePosition().x - currentCamera.x) / currentCamera.zoom
+  const worldMouseY = () => (mousePosition().y - currentCamera.y) / currentCamera.zoom
+
+  const path = () => {
+    const from = fromCoords()
+    if (!from) return ''
+
+    const startX = from.x
+    const startY = from.y
+    const endX = worldMouseX()
+    const endY = worldMouseY()
+
+    if (dragInfo.connectionType === 'output') {
+      return createSCurvePath(startX, startY, endX, endY)
+    } else {
+      return createSCurvePath(endX, endY, startX, startY)
+    }
+  }
+  return <path d={path()} stroke="#0ea5e9" stroke-width="2" fill="none" />
 }
 
 function StageBackground() {
@@ -821,6 +980,38 @@ export const ElementTransformControls: Component<{ elementId: string }> = props 
   )
 }
 
+export const ElementConnectionPoint: Component<{
+  elementId: string
+  type: 'input' | 'output'
+}> = props => {
+  const { state } = useStage()
+  const element = state.elements[props.elementId]
+
+  return (
+    <Show when={element}>
+      <div
+        data-element-id={props.elementId}
+        data-connection-point={props.type}
+        style={{
+          position: 'absolute',
+          width: '13px',
+          height: '13px',
+          'background-color': props.type === 'input' ? 'orange' : 'blue',
+          'border-radius': '50%',
+          top: '50%',
+          left: props.type === 'input' ? '0px' : '100%',
+          transform: 'translateY(-50%) translateX(-50%)',
+          border: '2px solid black',
+          'box-sizing': 'border-box',
+          // NEW: Ensure connection points are always clickable
+          'pointer-events': 'all',
+          cursor: 'pointer',
+        }}
+      />
+    </Show>
+  )
+}
+
 export function createInitialState(elements: UncreatedElementState[]) {
   const initialState = elements.reduce(
     (acc, el) => {
@@ -833,5 +1024,6 @@ export function createInitialState(elements: UncreatedElementState[]) {
     {} as Record<string, ElementState>,
   )
 
-  return { elements: initialState }
+  // NEW: Include connectionWires in the initial state object
+  return { elements: initialState, connectionWires: {} }
 }
