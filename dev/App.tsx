@@ -90,16 +90,17 @@ const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
   )
 }
 
-const stage = createStageContext()
+const stagectx = createStageContext()
+const { actions } = stagectx
 
 function App() {
   onMount(() => {
-    stage.createElement({
+    actions.createElement({
       type: 'circle',
       rect: { x: 50, y: 50, width: 100, height: 100 },
       props: { color: 'red', count: 0 },
     })
-    stage.createElement({
+    actions.createElement({
       type: 'rectangle',
       rect: { x: 400, y: 200, width: 100, height: 100 },
       props: { color: 'blue', count: 0 },
@@ -113,7 +114,7 @@ function App() {
     const y = Math.random() * 700
     const size = 50 + Math.random() * 100
 
-    stage.createElement({
+    actions.createElement({
       type,
       rect: { x, y, width: size, height: size },
       props: {
@@ -146,7 +147,7 @@ function App() {
           }}
         >
           <Stage
-            stage={stage}
+            context={stagectx}
             components={{
               elements: {
                 circle: CircleElement,
@@ -159,9 +160,36 @@ function App() {
               position: 'absolute',
               bottom: '10px',
               right: '10px',
+              display: 'flex',
+              'flex-direction': 'column',
             }}
           >
-            <button onClick={() => stage.centerContent({ animate: true })}>Center Content</button>
+            <button onClick={() => actions.centerContent({ animate: true })}>Center Content</button>
+            <div
+              style={{
+                display: 'flex',
+                'align-items': 'center',
+                gap: '10px',
+              }}
+            >
+              <button
+                style={{
+                  height: 'fit-content',
+                }}
+                onClick={() => actions.zoomIn()}
+              >
+                +
+              </button>
+              <p>{Math.round(stagectx.camera().zoom * 100)}%</p>
+              <button
+                style={{
+                  height: 'fit-content',
+                }}
+                onClick={() => actions.zoomOut()}
+              >
+                -
+              </button>
+            </div>
           </div>
         </div>
       </div>

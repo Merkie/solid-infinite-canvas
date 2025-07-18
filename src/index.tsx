@@ -143,6 +143,13 @@ type RenderableElements = Record<string, ValidComponent>
 
 // --- CONTEXT FOR STATE ENCAPSULATION ---
 
+type StageActions = {
+  createElement: (args: UncreatedElementState) => string
+  centerContent: (options?: { animate?: boolean; margin?: number }) => void
+  zoomIn: () => void
+  zoomOut: () => void
+}
+
 type StageContextType = {
   state: Store<StageState>
   setState: SetStoreFunction<StageState>
@@ -155,11 +162,12 @@ type StageContextType = {
   setDragStart: Setter<{ stageX: number; stageY: number; target: DragTarget } | undefined>
   panning: Accessor<boolean>
   setPanning: Setter<boolean>
-  createElement: (args: UncreatedElementState) => string
-  centerContent: (options?: { animate?: boolean; margin?: number }) => void
   containerSize: Accessor<{ width: number; height: number }>
   setContainerSize: Setter<{ width: number; height: number }>
+  actions: StageActions
 }
+
+type StageContextWithoutActions = Omit<StageContextType, 'actions'>
 
 export type ElementRendererComponent = Component<{
   elementId: string
@@ -173,7 +181,7 @@ export type CanvasElementComponent = Component<{
 
 const StageContext = createContext<StageContextType>()
 
-type CreateStageContextType = () => StageContextType
+type CreateStageContext = () => StageContextType
 
 type ElementType = string
 type StageComponents = {
@@ -181,26 +189,12 @@ type StageComponents = {
   background?: ValidComponent
 }
 
-export const createStageContext: CreateStageContextType = () => {
-  const [state, setState] = createStore<StageState>({
-    elements: {},
-    cursors: {},
-    selectionBoxes: {},
-    selectedElements: {},
-  })
+type CreateStageActions = (stage: StageContextWithoutActions) => StageActions
 
-  const clientId = createId()
-  const [camera, setCamera] = createSignal({ x: 0, y: 0, zoom: 1 })
-  const [mousePosition, setMousePosition] = createSignal({ x: 0, y: 0 })
-  const [dragStart, setDragStart] = createSignal<
-    { stageX: number; stageY: number; target: DragTarget } | undefined
-  >(undefined)
-  const [panning, setPanning] = createSignal(false)
-  const [containerSize, setContainerSize] = createSignal({ width: 0, height: 0 })
-
-  const createElement: StageContextType['createElement'] = element => {
+const createStageActions: CreateStageActions = (stage: StageContextWithoutActions) => {
+  const createElement: StageActions['createElement'] = element => {
     const id = createId()
-    setState('elements', id, {
+    stage.setState('elements', id, {
       type: element.type,
       props: element.props,
       rect: { ...element.rect, zIndex: 1 },
@@ -209,8 +203,8 @@ export const createStageContext: CreateStageContextType = () => {
     return id
   }
 
-  const centerContent: StageContextType['centerContent'] = options => {
-    const elements = Object.values(state.elements)
+  const centerContent: StageActions['centerContent'] = options => {
+    const elements = Object.values(stage.state.elements)
     if (elements.length === 0) return
 
     // 1. Define your desired padding
@@ -229,8 +223,8 @@ export const createStageContext: CreateStageContextType = () => {
     if (contentWidth === 0 || contentHeight === 0) return
 
     // 3. Calculate the required zoom level to fit the content
-    const zoomX = (containerSize().width - margin * 2) / contentWidth
-    const zoomY = (containerSize().height - margin * 2) / contentHeight
+    const zoomX = (stage.containerSize().width - margin * 2) / contentWidth
+    const zoomY = (stage.containerSize().height - margin * 2) / contentHeight
 
     // Use the smaller zoom level to ensure everything fits on the screen
     const newZoom = Math.min(zoomX, zoomY)
@@ -241,15 +235,15 @@ export const createStageContext: CreateStageContextType = () => {
 
     // 5. Center the view, adjusting the camera's position for the new zoom level
     const newCamera = {
-      x: containerSize().width / 2 - centerX * newZoom,
-      y: containerSize().height / 2 - centerY * newZoom,
+      x: stage.containerSize().width / 2 - centerX * newZoom,
+      y: stage.containerSize().height / 2 - centerY * newZoom,
       zoom: newZoom,
     }
 
-    const currentCamera = camera()
+    const currentCamera = stage.camera()
 
     if (!options?.animate) {
-      setCamera(newCamera)
+      stage.setCamera(newCamera)
     } else {
       gsap.killTweensOf(currentCamera)
 
@@ -260,7 +254,7 @@ export const createStageContext: CreateStageContextType = () => {
         y: newCamera.y,
         zoom: newCamera.zoom,
         onUpdate: () => {
-          setCamera({
+          stage.setCamera({
             x: currentCamera.x,
             y: currentCamera.y,
             zoom: currentCamera.zoom,
@@ -270,7 +264,88 @@ export const createStageContext: CreateStageContextType = () => {
     }
   }
 
-  const stage: StageContextType = {
+  const zoomIn = () => {
+    const currentCamera = stage.camera()
+    const newZoom = Math.min(currentCamera.zoom * 1.2, 10)
+    const centerX = stage.containerSize().width / 2
+    const centerY = stage.containerSize().height / 2
+
+    const newCamera = {
+      x: centerX - (centerX - currentCamera.x) * (newZoom / currentCamera.zoom),
+      y: centerY - (centerY - currentCamera.y) * (newZoom / currentCamera.zoom),
+      zoom: newZoom,
+    }
+    gsap.killTweensOf(currentCamera)
+    gsap.to(currentCamera, {
+      duration: 0.2,
+      ease: 'power2.out',
+      x: newCamera.x,
+      y: newCamera.y,
+      zoom: newCamera.zoom,
+      onUpdate: () => {
+        stage.setCamera({
+          x: currentCamera.x,
+          y: currentCamera.y,
+          zoom: currentCamera.zoom,
+        })
+      },
+    })
+  }
+
+  const zoomOut = () => {
+    const currentCamera = stage.camera()
+    const newZoom = Math.max(currentCamera.zoom / 1.2, 0.1)
+    const centerX = stage.containerSize().width / 2
+    const centerY = stage.containerSize().height / 2
+
+    const newCamera = {
+      x: centerX - (centerX - currentCamera.x) * (newZoom / currentCamera.zoom),
+      y: centerY - (centerY - currentCamera.y) * (newZoom / currentCamera.zoom),
+      zoom: newZoom,
+    }
+    gsap.killTweensOf(currentCamera)
+    gsap.to(currentCamera, {
+      duration: 0.2,
+      ease: 'power2.out',
+      x: newCamera.x,
+      y: newCamera.y,
+      zoom: newCamera.zoom,
+      onUpdate: () => {
+        stage.setCamera({
+          x: currentCamera.x,
+          y: currentCamera.y,
+          zoom: currentCamera.zoom,
+        })
+      },
+    })
+  }
+
+  return {
+    createElement,
+    centerContent,
+    zoomIn,
+    zoomOut,
+  }
+}
+
+export const createStageContext: CreateStageContext = () => {
+  const [state, setState] = createStore<StageState>({
+    elements: {},
+    cursors: {},
+    selectionBoxes: {},
+    selectedElements: {},
+  })
+
+  const clientId = createId()
+  const [camera, setCamera] = createSignal({ x: 0, y: 0, zoom: 1 })
+  const [mousePosition, setMousePosition] = createSignal({ x: 0, y: 0 })
+  const [dragStart, setDragStart] = createSignal<
+    { stageX: number; stageY: number; target: DragTarget } | undefined
+  >(undefined)
+  const [panning, setPanning] = createSignal(false)
+  const [containerSize, setContainerSize] = createSignal({ width: 0, height: 0 })
+
+  const stage: StageContextWithoutActions = {
     state,
     setState,
     clientId,
@@ -282,19 +357,22 @@ export const createStageContext: CreateStageContextType = () => {
     setDragStart,
     panning,
     setPanning,
-    createElement,
-    centerContent,
     containerSize,
     setContainerSize,
   }
 
-  return stage
+  const actions = createStageActions(stage)
+
+  return {
+    ...stage,
+    actions,
+  }
 }
 
 const StageProvider: ParentComponent<{
-  stage: StageContextType
+  context: StageContextType
 }> = props => {
-  return <StageContext.Provider value={props.stage}>{props.children}</StageContext.Provider>
+  return <StageContext.Provider value={props.context}>{props.children}</StageContext.Provider>
 }
 
 export const useStage = () => {
@@ -308,11 +386,11 @@ export const useStage = () => {
 // --- STAGE COMPONENT ---
 
 export const Stage: Component<{
-  stage: StageContextType
+  context: StageContextType
   components: StageComponents
 }> = props => {
   return (
-    <StageProvider stage={props.stage}>
+    <StageProvider context={props.context}>
       <StageCanvas components={props.components} />
     </StageProvider>
   )
