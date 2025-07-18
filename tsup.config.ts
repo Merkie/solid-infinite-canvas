@@ -13,14 +13,14 @@ const preset_options: preset.PresetOptions = {
       dev_entry: true,
     },
     // Plugin entries
-    {
-      name: 'ResizePlugin',
-      entry: 'src/plugins/ResizePlugin.ts',
-    },
-    {
-      name: 'ConnectionsPlugin',
-      entry: 'src/plugins/ConnectionsPlugin.ts',
-    },
+    // {
+    //   name: 'ResizePlugin',
+    //   entry: 'src/plugins/ResizePlugin.ts',
+    // },
+    // {
+    //   name: 'ConnectionsPlugin',
+    //   entry: 'src/plugins/ConnectionsPlugin.ts',
+    // },
   ],
   drop_console: true,
 }
