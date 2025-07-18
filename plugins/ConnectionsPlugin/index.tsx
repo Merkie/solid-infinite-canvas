@@ -128,7 +128,7 @@ const ConnectionsPlugin: StagePlugin = {
 
           {/* Render temporary wire while dragging */}
           <Show when={dragStart()?.target.type === 'connection'}>
-            <ConnectionCursor />
+            <ConnectionCursor stagectx={stage} />
           </Show>
         </svg>
       )
@@ -152,8 +152,8 @@ function createDynamicSCurvePath(x1: number, y1: number, x2: number, y2: number)
   }
 }
 
-function ConnectionCursor() {
-  const { dragStart, mousePosition } = useStage()
+function ConnectionCursor({ stagectx }: { stagectx: StageContextType }) {
+  const { dragStart, mousePosition } = stagectx
 
   const dragInfo = dragStart()!.target
   const fromCoords = () =>
