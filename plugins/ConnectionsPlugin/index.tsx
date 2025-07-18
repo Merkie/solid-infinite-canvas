@@ -157,7 +157,7 @@ function ConnectionCursor() {
 
   const dragInfo = dragStart()!.target
   const fromCoords = () =>
-    getConnectionPointCoords(dragInfo.elementId!, dragInfo.ext?.connectionType!)
+    getConnectionPointCoords(dragInfo.elementId!, dragInfo.ext?.connectionType)
 
   const path = () => {
     const from = fromCoords()
