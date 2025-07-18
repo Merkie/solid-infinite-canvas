@@ -2,30 +2,28 @@ import { defineConfig } from 'tsup'
 import * as preset from 'tsup-preset-solid'
 
 const preset_options: preset.PresetOptions = {
-  // `entries` must be an array of entry objects.
+  // array or single object
   entries: [
-    // Main library entry
+    // default entry (index)
     {
-      // Use the `name` property to explicitly set the output folder and export name.
-      name: 'index',
-      entry: 'src/index.ts', // or .tsx
-      // `dev_entry` applies to this specific entry object.
+      // entries with '.tsx' extension will have `solid` export condition generated
+      entry: 'src/index.tsx',
+      // will generate a separate development entry
       dev_entry: true,
     },
-    // Plugin entries
-    // {
-    //   name: 'ResizePlugin',
-    //   entry: 'src/plugins/ResizePlugin.ts',
-    // },
-    // {
-    //   name: 'ConnectionsPlugin',
-    //   entry: 'src/plugins/ConnectionsPlugin.ts',
-    // },
+    {
+      entry: 'src/plugins/ResizePlugin.ts',
+    },
+    {
+      entry: 'src/plugins/ConnectionsPlugin.tsx',
+    },
   ],
+  // Set to `true` to remove all `console.*` calls and `debugger` statements in prod builds
   drop_console: true,
+  // Set to `true` to generate a CommonJS build alongside ESM
+  // cjs: true,
 }
 
-// The rest of your file remains the same...
 const CI =
   process.env['CI'] === 'true' ||
   process.env['GITHUB_ACTIONS'] === 'true' ||
@@ -38,6 +36,7 @@ export default defineConfig(config => {
   if (!watching && !CI) {
     const package_fields = preset.generatePackageExports(parsed_options)
     console.log(`package.json: \n\n${JSON.stringify(package_fields, null, 2)}\n\n`)
+    // will update ./package.json with the correct export fields
     preset.writePackageJson(package_fields)
   }
   return preset.generateTsupOptions(parsed_options)
