@@ -92,8 +92,6 @@ const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
 
 const stage = createStageContext()
 
-const stage2 = createStageContext()
-
 function App() {
   onMount(() => {
     stage.createElement({
@@ -105,21 +103,6 @@ function App() {
       type: 'rectangle',
       rect: { x: 400, y: 200, width: 100, height: 100 },
       props: { color: 'blue', count: 0 },
-    })
-    stage.setCamera(prev => ({
-      ...prev,
-      zoom: 0.75,
-    }))
-
-    stage2.createElement({
-      type: 'circle',
-      rect: { x: 150, y: 150, width: 100, height: 100 },
-      props: { color: 'yellow', count: 0 },
-    })
-    stage2.createElement({
-      type: 'rectangle',
-      rect: { x: 100, y: 300, width: 100, height: 100 },
-      props: { color: 'green', count: 0 },
     })
   })
 
@@ -155,33 +138,32 @@ function App() {
           gap: '20px',
         }}
       >
-        <Stage
+        <div
           style={{
             width: '500px',
             height: '500px',
+            position: 'relative',
           }}
-          stage={stage}
-          components={{
-            background: CustomStageBackground,
-            elements: {
-              circle: CircleElement,
-              rectangle: RectangleElement,
-            },
-          }}
-        />
-        <Stage
-          style={{
-            width: '500px',
-            height: '500px',
-          }}
-          stage={stage2}
-          components={{
-            elements: {
-              circle: CircleElement,
-              rectangle: RectangleElement,
-            },
-          }}
-        />
+        >
+          <Stage
+            stage={stage}
+            components={{
+              elements: {
+                circle: CircleElement,
+                rectangle: RectangleElement,
+              },
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '10px',
+              right: '10px',
+            }}
+          >
+            <button onClick={() => stage.centerContent({ animate: true })}>Center Content</button>
+          </div>
+        </div>
       </div>
       <button onClick={createRandomElement}>Create Element</button>
     </div>

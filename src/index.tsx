@@ -24,7 +24,11 @@ import gsap from 'gsap'
 const styles: Record<string, JSX.CSSProperties> = {
   stage: {
     overflow: 'hidden',
-    position: 'relative',
+    position: 'absolute',
+    top: '0px',
+    left: '0px',
+    width: '100%',
+    height: '100%',
     'box-sizing': 'border-box',
     outline: 'none',
   },
@@ -152,6 +156,9 @@ type StageContextType = {
   panning: Accessor<boolean>
   setPanning: Setter<boolean>
   createElement: (args: UncreatedElementState) => string
+  centerContent: (options?: { animate?: boolean; margin?: number }) => void
+  containerSize: Accessor<{ width: number; height: number }>
+  setContainerSize: Setter<{ width: number; height: number }>
 }
 
 export type ElementRendererComponent = Component<{
@@ -189,6 +196,7 @@ export const createStageContext: CreateStageContextType = () => {
     { stageX: number; stageY: number; target: DragTarget } | undefined
   >(undefined)
   const [panning, setPanning] = createSignal(false)
+  const [containerSize, setContainerSize] = createSignal({ width: 0, height: 0 })
 
   const createElement: StageContextType['createElement'] = element => {
     const id = createId()
@@ -199,6 +207,67 @@ export const createStageContext: CreateStageContextType = () => {
     })
 
     return id
+  }
+
+  const centerContent: StageContextType['centerContent'] = options => {
+    const elements = Object.values(state.elements)
+    if (elements.length === 0) return
+
+    // 1. Define your desired padding
+    const margin = options?.margin || 50
+
+    // 2. Find the bounding box of all elements
+    const minX = Math.min(...elements.map(el => el.rect.x))
+    const minY = Math.min(...elements.map(el => el.rect.y))
+    const maxX = Math.max(...elements.map(el => el.rect.x + el.rect.width))
+    const maxY = Math.max(...elements.map(el => el.rect.y + el.rect.height))
+
+    const contentWidth = maxX - minX
+    const contentHeight = maxY - minY
+
+    // Handle case where content has no size to prevent division by zero
+    if (contentWidth === 0 || contentHeight === 0) return
+
+    // 3. Calculate the required zoom level to fit the content
+    const zoomX = (containerSize().width - margin * 2) / contentWidth
+    const zoomY = (containerSize().height - margin * 2) / contentHeight
+
+    // Use the smaller zoom level to ensure everything fits on the screen
+    const newZoom = Math.min(zoomX, zoomY)
+
+    // 4. Calculate the center of the content
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+
+    // 5. Center the view, adjusting the camera's position for the new zoom level
+    const newCamera = {
+      x: containerSize().width / 2 - centerX * newZoom,
+      y: containerSize().height / 2 - centerY * newZoom,
+      zoom: newZoom,
+    }
+
+    const currentCamera = camera()
+
+    if (!options?.animate) {
+      setCamera(newCamera)
+    } else {
+      gsap.killTweensOf(currentCamera)
+
+      gsap.to(currentCamera, {
+        duration: 0.2,
+        ease: 'power2.out',
+        x: newCamera.x,
+        y: newCamera.y,
+        zoom: newCamera.zoom,
+        onUpdate: () => {
+          setCamera({
+            x: currentCamera.x,
+            y: currentCamera.y,
+            zoom: currentCamera.zoom,
+          })
+        },
+      })
+    }
   }
 
   const stage: StageContextType = {
@@ -214,6 +283,9 @@ export const createStageContext: CreateStageContextType = () => {
     panning,
     setPanning,
     createElement,
+    centerContent,
+    containerSize,
+    setContainerSize,
   }
 
   return stage
@@ -235,25 +307,18 @@ export const useStage = () => {
 
 // --- STAGE COMPONENT ---
 
-export const Stage: ParentComponent<{
+export const Stage: Component<{
   stage: StageContextType
   components: StageComponents
-  class?: string
-  style?: JSX.CSSProperties
 }> = props => {
   return (
     <StageProvider stage={props.stage}>
-      <StageCanvas components={props.components} class={props.class} style={props.style} />
-      {props.children}
+      <StageCanvas components={props.components} />
     </StageProvider>
   )
 }
 
-function StageCanvas(props: {
-  components: StageComponents
-  class?: string
-  style?: JSX.CSSProperties
-}) {
+function StageCanvas(props: { components: StageComponents }) {
   const {
     state,
     setState,
@@ -265,6 +330,7 @@ function StageCanvas(props: {
     setDragStart,
     panning,
     setPanning,
+    setContainerSize,
   } = useStage()
 
   let stageRef: HTMLDivElement | undefined
@@ -527,6 +593,12 @@ function StageCanvas(props: {
 
   onMount(() => {
     if (!stageRef) return
+
+    setContainerSize({
+      width: stageRef.clientWidth,
+      height: stageRef.clientHeight,
+    })
+
     stageRef.addEventListener('mousedown', onMouseDown)
     stageRef.addEventListener('mousemove', onMouseMove)
     stageRef.addEventListener('keydown', onKeyDown)
@@ -549,10 +621,9 @@ function StageCanvas(props: {
     <main
       ref={stageRef}
       tabIndex={0}
-      class={props.class}
       style={{
         ...styles.stage,
-        ...props.style,
+
         cursor:
           dragStart()?.target.type === 'resize'
             ? getResizeCursor(dragStart()?.target.resizeDir)
