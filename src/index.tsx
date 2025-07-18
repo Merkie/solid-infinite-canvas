@@ -89,6 +89,7 @@ export type CanvasElementComponent = Component<{
   stage: StageContextType
   elementId: string
   element: ElementState
+  isSelected: () => boolean
 }>
 
 type CreateStageContext = () => StageContextType
@@ -632,6 +633,8 @@ function StageBackground({ stage }: { stage: StageContextType }) {
 
 const ElementRenderer: ElementRendererComponent = props => {
   const element = props.stage.state.elements[props.elementId]
+  const isSelected = () =>
+    props.stage.state.selectedElements[props.stage.clientId]?.includes(props.elementId)
 
   return (
     <Show when={element}>
@@ -643,6 +646,7 @@ const ElementRenderer: ElementRendererComponent = props => {
               stage={props.stage}
               element={element}
               elementId={props.elementId}
+              isSelected={isSelected}
             />
           </Show>
         )}
