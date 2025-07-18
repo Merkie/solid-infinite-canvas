@@ -162,6 +162,7 @@ function App() {
             position: 'relative',
           }}
         >
+          {/* Stage fills the container */}
           <Stage
             context={stagectx}
             components={{

@@ -4,27 +4,11 @@
 
 # solid-infinite-canvas
 
-[![pnpm](https://img.shields.io/badge/maintained%20with-pnpm-cc00ff.svg?style=for-the-badge&logo=pnpm)](https://pnpm.io/)
-[![NPM Version](https://img.shields.io/npm/v/solid-infinite-canvas?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/solid-infinite-canvas)
-[![MIT License](https://img.shields.io/github/license/merkie/solid-infinite-canvas?style=for-the-badge)](https://github.com/merkie/solid-infinite-canvas/blob/main/LICENSE)
+[](https://pnpm.io/)
+[](https://www.npmjs.com/package/solid-infinite-canvas)
+[](https://github.com/merkie/solid-infinite-canvas/blob/main/LICENSE)
 
-A powerful and flexible library for creating infinite, pannable, and zoomable canvases in SolidJS. Perfect for building diagrams, whiteboards, or any node-based editor.
-
----
-
-## Table of Contents
-
-- [solid-infinite-canvas](#solid-infinite-canvas)
-  - [Table of Contents](#table-of-contents)
-  - [Features](#features)
-  - [Installation](#installation)
-  - [Quick Start](#quick-start)
-  - [API \& Usage](#api--usage)
-    - [Defining Element Components](#defining-element-components)
-    - [Updating State](#updating-state)
-    - [Custom Backgrounds](#custom-backgrounds)
-    - [Multiple Stages](#multiple-stages)
-  - [License](#license)
+A powerful and flexible library for creating infinite, pannable, and zoomable canvases in SolidJS. Perfect for building diagrams, whiteboards, or any node-based editor. 🚀
 
 ---
 
@@ -32,9 +16,9 @@ A powerful and flexible library for creating infinite, pannable, and zoomable ca
 
 - ✨ **Infinite Canvas**: Pan and zoom on a limitless 2D stage.
 - 📦 **Custom Elements**: Render any SolidJS component as a canvas element.
-- 🖐️ **Transform Controls**: Built-in, customizable controls for moving and resizing elements.
+- 🔌 **Plugin System**: Easily extend functionality with plugins for features like resizing, connections, etc.
 - ⚡️ **Reactive State**: A simple and powerful API to manage canvas and element state, built on SolidJS signals.
-- 🎨 **Custom Backgrounds**: Easily create dynamic, grid-based, or static backgrounds.
+- 🎨 **Custom Backgrounds**: Create dynamic, grid-based, or static backgrounds.
 - ⚫️ **Multiple Stages**: Render multiple independent canvases on the same page.
 - 🟦 **Fully Typed**: Written in TypeScript for a great developer experience.
 
@@ -57,61 +41,66 @@ yarn add solid-infinite-canvas
 
 ## Quick Start
 
-Get started by creating a `stage` and rendering it with the `<Stage>` component.
+Getting started is easy. Just create a stage context, define your element components, and render the `<Stage>`.
 
 ```tsx
 import { onMount } from 'solid-js'
-import { createStageContext, Stage, ElementTransformControls } from 'solid-infinite-canvas'
+import { createStageContext, Stage, CanvasElementComponent, useStage } from 'solid-infinite-canvas'
 
-// 1. Create a stage context
-const stage = createStageContext()
+// 1. Define your custom element component
+const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
+  const { setState } = useStage()
+
+  const changeColor = () => {
+    const randomColor = `#${Math.floor(Math.random() * 16777215).toString(16)}`
+    setState('elements', elementId, 'props', 'color', randomColor)
+  }
+
+  return (
+    <div
+      onClick={changeColor}
+      style={{
+        width: '100%',
+        height: '100%',
+        'background-color': element.props.color,
+        border: '1px solid black',
+        color: 'white',
+        display: 'grid',
+        'place-items': 'center',
+        cursor: 'pointer',
+      }}
+    >
+      Click Me!
+    </div>
+  )
+}
+
+// 2. Create a stage context
+const stageContext = createStageContext()
+const { actions } = stageContext
 
 function App() {
-  // 2. Add elements to the stage
+  // 3. Add elements to the stage
   onMount(() => {
-    stage.createElement({
+    actions.createElement({
       type: 'rectangle',
       rect: { x: 100, y: 100, width: 150, height: 100 },
       props: { color: 'cornflowerblue' },
     })
-    stage.createElement({
-      type: 'circle',
-      rect: { x: 300, y: 250, width: 100, height: 100 },
-      props: { color: 'tomato' },
-    })
   })
 
   return (
-    // 3. Render the stage and define your elements
-    <Stage
-      style={{
-        width: '100vw',
-        height: '100vh',
-      }}
-      stage={stage}
-      components={{
-        elements: {
-          rectangle: ({ element, elementId }) => (
-            <>
-              <div
-                class="absolute inset-0 w-full h-full"
-                style={{ 'background-color': element.props.color }}
-              />
-              <ElementTransformControls elementId={elementId} />
-            </>
-          ),
-          circle: ({ element, elementId }) => (
-            <>
-              <div
-                class="absolute inset-0 w-full h-full rounded-full"
-                style={{ 'background-color': element.props.color }}
-              />
-              <ElementTransformControls elementId={elementId} />
-            </>
-          ),
-        },
-      }}
-    />
+    // 4. Render the Stage component (the Stage component fills its parent)
+    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+      <Stage
+        context={stageContext}
+        components={{
+          elements: {
+            rectangle: RectangleElement,
+          },
+        }}
+      />
+    </div>
   )
 }
 
@@ -120,121 +109,172 @@ export default App
 
 ---
 
-## API & Usage
+## Core Concepts
 
-### Defining Element Components
+### The Stage Context
 
-For better organization and type safety, define your elements as separate components. Use the `CanvasElementComponent` type for props.
+Everything in the canvas revolves around a **stage context**. You create one with `createStageContext()`.
+
+```ts
+const stageContext = createStageContext()
+```
+
+This context object contains:
+
+- `state`: A SolidJS store holding the state for all elements, cursors, etc.
+- `setState`: The function to update the state.
+- `camera`: A signal with the current `{ x, y, zoom }` of the camera.
+- `actions`: A set of helpful functions (`createElement`, `centerContent`, `zoomIn`, `zoomOut`) to control the stage.
+
+You pass the whole context to the `<Stage>` component via the `context` prop.
+
+### Canvas Elements
+
+Elements are just standard SolidJS components. For proper typing, use the `CanvasElementComponent` type. Inside your component, you can use the `useStage()` hook to access the stage context and update state.
 
 ```tsx
-import { CanvasElementComponent, useStage, ElementTransformControls } from 'solid-infinite-canvas'
+import { CanvasElementComponent, useStage } from 'solid-infinite-canvas'
 
-const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
+const MyElement: CanvasElementComponent = ({ element, elementId }) => {
+  // Get access to the stage's setState function
   const { setState } = useStage()
 
-  const currentCount = () => element.props.count || 0
+  // Update this element's props when clicked
+  const handleClick = () => {
+    setState('elements', elementId, 'props', 'someValue', v => v + 1)
+  }
 
+  return <div onClick={handleClick}>{element.props.someValue}</div>
+}
+```
+
+---
+
+## Plugins
+
+Plugins are the primary way to add new features to the stage, like resizing elements or drawing connections between them.
+
+### Using Existing Plugins
+
+The library ships with pre-built plugins. To use them, import the plugin and any components it provides, then add them to the `<Stage>` component.
+
+For example, to add resizing and connection capabilities:
+
+```tsx
+import ResizePlugin, { ElementTransformControls } from 'solid-infinite-canvas/plugins/ResizePlugin'
+import ConnectionsPlugin, {
+  ElementConnectionPoint,
+} from 'solid-infinite-canvas/plugins/ConnectionsPlugin'
+
+// In your Stage component:
+const App = () => {
+  return (
+    <Stage
+      context={stageContext}
+      components={{
+        elements: {
+          /* your elements */
+        },
+      }}
+      plugins={[ConnectionsPlugin, ResizePlugin]} // <-- Add plugins here
+    />
+  )
+}
+
+// In your element component:
+const MyNode: CanvasElementComponent = ({ elementId }) => {
   return (
     <>
-      <div
-        class="circle-body"
-        onClick={() => {
-          // Update the element's state when clicked
-          setState('elements', elementId, 'props', 'count', c => (c || 0) + 1)
-        }}
-      >
-        Clicked: {currentCount()}
-      </div>
+      <div class="my-node-body">...</div>
+
+      {/* Add connection points from the ConnectionsPlugin */}
+      <ElementConnectionPoint elementId={elementId} type="input" />
+      <ElementConnectionPoint elementId={elementId} type="output" />
+
+      {/* Add resize handles from the ResizePlugin */}
       <ElementTransformControls elementId={elementId} />
     </>
   )
 }
 ```
 
-### Updating State
+### Building Your Own Plugin
 
-The `useStage` hook gives you access to the stage's context, including the powerful `setState` function. You can use it to modify any part of the stage's state, such as an element's props.
+A plugin is an object with a `name`, and optional `events` and `components` properties.
 
-```tsx
-const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
-  const { setState } = useStage()
+- **`name`**: A unique string identifier for the plugin.
+- **`events`**: An object of event handlers (`onMouseDown`, `onWindowMouseMove`, etc.). These handlers receive the `event` and the entire `stage` context, allowing you to react to user input and modify the stage state.
+- **`components`**: An object that can contain `viewBack` or `viewFront` components. These are rendered behind or in front of the main elements, respectively. Useful for things like connection lines (in the back) or tooltips (in the front).
 
-  // Change to a random color on click
-  const changeColor = () => {
-    const randomColor = `#${Math.floor(Math.random() * 16777215).toString(16)}`
-    setState('elements', elementId, 'props', 'color', randomColor)
-  }
+Here is a simplified look at the `ConnectionsPlugin` structure:
 
-  return (
-    <div
-      class="rectangle-body"
-      style={{ 'background-color': element.props.color }}
-      onClick={changeColor}
-    >
-      Click Me!
-    </div>
-  )
+```ts
+import { StagePlugin } from 'solid-infinite-canvas'
+
+const ConnectionsPlugin: StagePlugin = {
+  name: 'connections',
+
+  // React to mouse events to create connections
+  events: {
+    onMouseDown: (event, stage) => {
+      const target = event.target as HTMLElement
+      // Check if the user clicked on a connection point
+      if (target.dataset.connectionPoint) {
+        // Logic to start dragging a connection wire...
+      }
+    },
+    onWindowMouseUp: (event, stage) => {
+      // Logic to finalize the connection and update state...
+      // Plugins can store their own state in stage.state.ext
+      stage.setState('ext', 'connectionWires', newId, { from, to })
+    },
+  },
+
+  // Render the connection wires behind the elements
+  components: {
+    viewBack: () => {
+      const { state } = useStage()
+      // Logic to get connection data from state.ext.connectionWires
+      // and render SVG paths for each connection.
+      return <svg>...</svg>
+    },
+  },
 }
 ```
 
-### Custom Backgrounds
+### Creating Plugin Components
 
-Pass a custom component to the `background` prop of the `<Stage>` component. Use the `useStage` hook to access the `camera` state to create a background that responds to panning and zooming.
+Plugin components like `ElementConnectionPoint` or `ElementTransformControls` are the interactive parts of a plugin that you place inside your elements.
+
+The key is to use **`data-*` attributes**. The plugin's event handlers use these attributes to identify what the user is interacting with.
+
+Here's the `ElementConnectionPoint` component. Notice how `data-element-id` and `data-connection-point` are used. The `ConnectionsPlugin`'s `onMouseDown` event handler looks for these specific attributes on `event.target` to know that a connection drag has started.
 
 ```tsx
-import { useStage } from 'solid-infinite-canvas'
+import { Component } from 'solid-js'
 
-function CustomGridBackground() {
-  const { camera } = useStage()
+export const ElementConnectionPoint: Component<{
+  elementId: string
+  type: 'input' | 'output'
+}> = props => {
   return (
     <div
+      // These attributes are how the plugin finds this component!
+      data-element-id={props.elementId}
+      data-connection-point={props.type}
       style={{
-        'pointer-events': 'none',
         position: 'absolute',
-        top: '0',
-        left: '0',
-        width: '100%',
-        height: '100%',
-        'background-position': `${camera().x}px ${camera().y}px`,
-        'background-size': `${40 * camera().zoom}px ${40 * camera().zoom}px`,
-        'background-image': `radial-gradient(circle, #444 1px, transparent 1px)`,
-        'background-color': '#1a1a1a',
+        width: '13px',
+        height: '13px',
+        background: 'orange',
+        'border-radius': '50%',
+        left: props.type === 'input' ? '0px' : '100%',
+        top: '50%',
+        transform: 'translate(-50%, -50%)',
+        cursor: 'pointer',
       }}
     />
   )
-}
-
-// Then, in your main component:
-;<Stage
-  stage={stage}
-  components={{
-    background: CustomGridBackground,
-    elements: {
-      /* ... your elements ... */
-    },
-  }}
-/>
-```
-
-### Multiple Stages
-
-Create and render multiple independent stages by calling `createStageContext` for each one.
-
-```tsx
-// Create two separate stage contexts
-const stageOne = createStageContext();
-const stageTwo = createStageContext();
-
-// Add elements to stageOne, stageTwo...
-
-// Render them
-function App() {
-  return (
-    <div class="flex gap-4">
-      <Stage class="w-1/2 h-full" stage={stageOne} components={...} />
-      <Stage class="w-1/2 h-full" stage={stageTwo} components={...} />
-    </div>
-  );
 }
 ```
 
