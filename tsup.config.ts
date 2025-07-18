@@ -2,19 +2,22 @@ import { defineConfig } from 'tsup'
 import * as preset from 'tsup-preset-solid'
 
 const preset_options: preset.PresetOptions = {
-  // array or single object
+  // Add your plugins to this entries array
   entries: [
-    // default entry (index)
+    // 1. Your default entry for the main library
     {
-      // entries with '.tsx' extension will have `solid` export condition generated
-      entry: 'src/index.tsx',
-      // will generate a separate development entry
+      entry: 'src/index.ts', // or .tsx
       dev_entry: true,
     },
+    // 2. Add an entry for each plugin submodule
+    {
+      entry: 'src/plugins/ResizePlugin.ts', // or .tsx
+    },
+    {
+      entry: 'src/plugins/ConnectionsPlugin.ts', // or .tsx
+    },
   ],
-  // Set to `true` to remove all `console.*` calls and `debugger` statements in prod builds
   drop_console: true,
-  // Set to `true` to generate a CommonJS build alongside ESM
   // cjs: true,
 }
 
@@ -34,7 +37,7 @@ export default defineConfig(config => {
 
     console.log(`package.json: \n\n${JSON.stringify(package_fields, null, 2)}\n\n`)
 
-    // will update ./package.json with the correct export fields
+    // This will now write the correct exports for your plugins
     preset.writePackageJson(package_fields)
   }
 
