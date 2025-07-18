@@ -1,6 +1,6 @@
 import { createId } from '@paralleldrive/cuid2'
 import { createEffect, createSignal, For, onMount, Show } from 'solid-js'
-import { StageContextType, StagePlugin, useStage } from 'src'
+import { StageContextType, StagePlugin } from 'src'
 import { ElementConnectionPoint } from './components/ElementConnectionPoint'
 
 type ConnectionWire = {
@@ -95,8 +95,8 @@ const ConnectionsPlugin: StagePlugin = {
               const [toCoords, setToCoords] = createSignal<{ x: number; y: number } | null>(null)
 
               const updateCoords = () => {
-                const from = getConnectionPointCoords(wire.fromElementId, 'output')
-                const to = getConnectionPointCoords(wire.toElementId, 'input')
+                const from = getConnectionPointCoords(wire.fromElementId, 'output', stage)
+                const to = getConnectionPointCoords(wire.toElementId, 'input', stage)
                 setFromCoords(from)
                 setToCoords(to)
               }
@@ -128,7 +128,7 @@ const ConnectionsPlugin: StagePlugin = {
 
           {/* Render temporary wire while dragging */}
           <Show when={dragStart()?.target.type === 'connection'}>
-            <ConnectionCursor stagectx={stage} />
+            <ConnectionCursor stage={stage} />
           </Show>
         </svg>
       )
@@ -152,12 +152,12 @@ function createDynamicSCurvePath(x1: number, y1: number, x2: number, y2: number)
   }
 }
 
-function ConnectionCursor({ stagectx }: { stagectx: StageContextType }) {
-  const { dragStart, mousePosition } = stagectx
+function ConnectionCursor({ stage }: { stage: StageContextType }) {
+  const { dragStart, mousePosition } = stage
 
   const dragInfo = dragStart()!.target
   const fromCoords = () =>
-    getConnectionPointCoords(dragInfo.elementId!, dragInfo.ext?.connectionType)
+    getConnectionPointCoords(dragInfo.elementId!, dragInfo.ext?.connectionType, stage)
 
   const path = () => {
     const from = fromCoords()
@@ -181,10 +181,9 @@ function ConnectionCursor({ stagectx }: { stagectx: StageContextType }) {
 function getConnectionPointCoords(
   elementId: string,
   type: 'input' | 'output',
+  stage: StageContextType,
 ): { x: number; y: number } | null {
-  const { stageId, camera } = useStage()
-
-  const viewElement = document.querySelector(`[data-view-stage-id="${stageId}"]`)
+  const viewElement = document.querySelector(`[data-view-stage-id="${stage.stageId}"]`)
   if (!viewElement) return null
 
   // 1. Find the connection point's DOM element using its data attributes.
@@ -201,7 +200,7 @@ function getConnectionPointCoords(
   const viewportY = pointRect.top + pointRect.height / 2
 
   // 4. Convert the screen-space coordinates to the canvas's local "world" space.
-  const currentCamera = camera()
+  const currentCamera = stage.camera()
   const worldX = (viewportX - viewRect.left) / currentCamera.zoom
   const worldY = (viewportY - viewRect.top) / currentCamera.zoom
 

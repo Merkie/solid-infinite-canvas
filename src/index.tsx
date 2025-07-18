@@ -1,14 +1,11 @@
 import { createId } from '@paralleldrive/cuid2'
 import {
   batch,
-  createContext,
   createSignal,
   For,
   onCleanup,
   onMount,
   Show,
-  useContext,
-  ParentComponent,
   Accessor,
   Setter,
   ValidComponent,
@@ -83,16 +80,16 @@ export type StageContextType = {
 type StageContextWithoutActions = Omit<StageContextType, 'actions'>
 
 export type ElementRendererComponent = Component<{
+  stage: StageContextType
   elementId: string
   renderableElements: RenderableElements
 }>
 
 export type CanvasElementComponent = Component<{
+  stage: StageContextType
   elementId: string
   element: ElementState
 }>
-
-const StageContext = createContext<StageContextType>()
 
 type CreateStageContext = () => StageContextType
 
@@ -267,20 +264,6 @@ export const createStageContext: CreateStageContext = () => {
   }
 }
 
-const StageProvider: ParentComponent<{
-  context: StageContextType
-}> = props => {
-  return <StageContext.Provider value={props.context}>{props.children}</StageContext.Provider>
-}
-
-export const useStage = () => {
-  const context = useContext(StageContext)
-  if (!context) {
-    throw new Error('useStage must be used within a StageProvider')
-  }
-  return context
-}
-
 // --- STAGE COMPONENT ---
 
 export type StagePlugin = {
@@ -305,14 +288,20 @@ export const Stage: Component<{
   plugins?: (StagePlugin | StagePlugin[])[]
 }> = props => {
   return (
-    <StageProvider context={props.context}>
-      <StageCanvas components={props.components} plugins={(props.plugins || []).flat()} />
-    </StageProvider>
+    <StageCanvas
+      components={props.components}
+      plugins={(props.plugins || []).flat()}
+      stage={props.context}
+    />
   )
 }
 
-function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[] }) {
-  const stage = useStage()
+function StageCanvas(props: {
+  components: StageComponents
+  plugins: StagePlugin[]
+  stage: StageContextType
+}) {
+  const stage = props.stage
   const {
     stageId,
     state,
@@ -553,7 +542,7 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         cursor: panning() ? (dragStart()?.target ? 'grabbing' : 'grab') : 'auto',
       }}
     >
-      <Dynamic component={props.components.background ?? StageBackground} />
+      <Dynamic component={props.components.background ?? StageBackground} stage={stage} />
       <div
         data-sic-type="view"
         data-view-stage-id={stageId}
@@ -589,6 +578,7 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
             >
               <Dynamic
                 component={ElementRenderer}
+                stage={stage}
                 elementId={id}
                 renderableElements={props.components.elements}
               />
@@ -627,14 +617,13 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
   )
 }
 
-function StageBackground() {
-  const { camera } = useStage()
+function StageBackground({ stage }: { stage: StageContextType }) {
   return (
     <div
       style={{
         ...styles.backgroundGrid,
-        'background-position': `${camera().x}px ${camera().y}px`,
-        'background-size': `${40 * camera().zoom}px ${40 * camera().zoom}px`,
+        'background-position': `${stage.camera().x}px ${stage.camera().y}px`,
+        'background-size': `${40 * stage.camera().zoom}px ${40 * stage.camera().zoom}px`,
         'pointer-events': 'none',
       }}
     ></div>
@@ -642,15 +631,19 @@ function StageBackground() {
 }
 
 const ElementRenderer: ElementRendererComponent = props => {
-  const { state } = useStage()
-  const element = state.elements[props.elementId]
+  const element = props.stage.state.elements[props.elementId]
 
   return (
     <Show when={element}>
       <For each={Object.entries(props.renderableElements)}>
         {([type, el]) => (
           <Show when={element?.type === type}>
-            <Dynamic component={el} elementId={props.elementId} element={element} />
+            <Dynamic
+              component={el}
+              stage={props.stage}
+              element={element}
+              elementId={props.elementId}
+            />
           </Show>
         )}
       </For>

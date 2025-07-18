@@ -1,12 +1,9 @@
-import { CanvasElementComponent, createStageContext, Stage, useStage } from 'src'
+import { CanvasElementComponent, createStageContext, Stage, StageContextType } from 'src'
 import ResizePlugin, { ElementTransformControls } from 'plugins/ResizePlugin'
 import ConnectionsPlugin, { ElementConnectionPoint } from 'plugins/ConnectionsPlugin'
 import { onMount } from 'solid-js'
 
-const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
-  const stage = useStage()
-  const { setState } = stage
-
+const CircleElement: CanvasElementComponent = ({ stage, element, elementId }) => {
   return (
     <>
       <div
@@ -26,7 +23,7 @@ const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
           'font-size': '1.5rem',
         }}
         onClick={() => {
-          setState('elements', elementId, 'props', 'count', c => (c || 0) + 1)
+          stage.setState('elements', elementId, 'props', 'count', c => (c || 0) + 1)
         }}
       >
         <div
@@ -47,10 +44,7 @@ const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
   )
 }
 
-const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
-  const stage = useStage()
-  const { setState } = stage
-
+const RectangleElement: CanvasElementComponent = ({ stage, element, elementId }) => {
   return (
     <>
       <div
@@ -74,7 +68,7 @@ const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
               ' ',
             )
           const randomColor = colors[Math.floor(Math.random() * colors.length)]
-          setState('elements', elementId, 'props', 'color', randomColor)
+          stage.setState('elements', elementId, 'props', 'color', randomColor)
         }}
       >
         <div
@@ -276,8 +270,7 @@ function App() {
   )
 }
 
-function CustomStageBackground() {
-  const { camera } = useStage()
+function CustomStageBackground({ stage }: { stage: StageContextType }) {
   return (
     <div
       style={{
@@ -287,8 +280,8 @@ function CustomStageBackground() {
         left: '0',
         width: '100%',
         height: '100%',
-        'background-position': `${camera().x}px ${camera().y}px`,
-        'background-size': `${40 * camera().zoom}px ${40 * camera().zoom}px`,
+        'background-position': `${stage.camera().x}px ${stage.camera().y}px`,
+        'background-size': `${40 * stage.camera().zoom}px ${40 * stage.camera().zoom}px`,
         'background-image': `radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px), radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
         'background-color': '#1a1a1a',
       }}
