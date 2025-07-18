@@ -13,11 +13,11 @@ const preset_options: preset.PresetOptions = {
     },
     {
       entry: 'plugins/ResizePlugin/index.tsx',
-      name: 'ResizePlugin',
+      name: 'plugins/ResizePlugin',
     },
     {
       entry: 'plugins/ConnectionsPlugin/index.tsx',
-      name: 'ConnectionsPlugin',
+      name: 'plugins/ConnectionsPlugin',
     },
   ],
   // Set to `true` to remove all `console.*` calls and `debugger` statements in prod builds

@@ -39,10 +39,31 @@
         "types": "./dist/index/index.d.ts",
         "default": "./dist/index/index.js"
       }
+    },
+    "./ConnectionsPlugin": {
+      "solid": "./dist/ConnectionsPlugin/index.jsx",
+      "import": {
+        "types": "./dist/ConnectionsPlugin/index.d.ts",
+        "default": "./dist/ConnectionsPlugin/index.js"
+      }
+    },
+    "./ResizePlugin": {
+      "solid": "./dist/ResizePlugin/index.jsx",
+      "import": {
+        "types": "./dist/ResizePlugin/index.d.ts",
+        "default": "./dist/ResizePlugin/index.js"
+      }
     }
   },
   "typesVersions": {
-    "*": {}
+    "*": {
+      "ConnectionsPlugin": [
+        "./dist/ConnectionsPlugin/index.d.ts"
+      ],
+      "ResizePlugin": [
+        "./dist/ResizePlugin/index.d.ts"
+      ]
+    }
   },
   "scripts": {
     "dev": "vite serve dev",
