@@ -1,10 +1,11 @@
 import { CanvasElementComponent, createStageContext, Stage, useStage } from 'src'
-import ResizePlugin, { ElementTransformControls } from 'src/plugins/ResizePlugin'
-import ConnectionsPlugin, { ElementConnectionPoint } from 'src/plugins/ConnectionsPlugin'
+import ResizePlugin, { ElementTransformControls } from 'plugins/ResizePlugin'
+import ConnectionsPlugin, { ElementConnectionPoint } from 'plugins/ConnectionsPlugin'
 import { onMount } from 'solid-js'
 
 const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
-  const { setState } = useStage()
+  const stage = useStage()
+  const { setState } = stage
 
   return (
     <>
@@ -39,15 +40,17 @@ const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
           {element.props.count}
         </div>
       </div>
-      <ElementConnectionPoint elementId={elementId} type="input" />
-      <ElementConnectionPoint elementId={elementId} type="output" />
-      <ElementTransformControls elementId={elementId} />
+      <ElementConnectionPoint elementId={elementId} type="input" stagectx={stage} />
+      <ElementConnectionPoint elementId={elementId} type="output" stagectx={stage} />
+      <ElementTransformControls elementId={elementId} stagectx={stage} />
     </>
   )
 }
 
 const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
-  const { setState } = useStage()
+  const stage = useStage()
+  const { setState } = stage
+
   return (
     <>
       <div
@@ -85,9 +88,9 @@ const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
           {element.props.color}
         </div>
       </div>
-      <ElementConnectionPoint elementId={elementId} type="input" />
-      <ElementConnectionPoint elementId={elementId} type="output" />
-      <ElementTransformControls elementId={elementId} />
+      <ElementConnectionPoint elementId={elementId} type="input" stagectx={stagectx} />
+      <ElementConnectionPoint elementId={elementId} type="output" stagectx={stagectx} />
+      <ElementTransformControls elementId={elementId} stagectx={stagectx} />
     </>
   )
 }
