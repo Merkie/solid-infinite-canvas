@@ -5,10 +5,10 @@ import {
   CanvasElementComponent,
   createStageContext,
   ElementConnectionPoint,
-  ElementTransformControls,
   Stage,
   useStage,
-} from 'src' // Assuming the core is in index.ts
+} from 'src'
+import ResizePlugin, { ElementTransformControls } from 'src/plugins/ResizePlugin'
 
 const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
   const { setState } = useStage()
@@ -504,77 +504,4 @@ function getConnectionPointCoords(
   const worldY = (viewportY - viewRect.top) / currentCamera.zoom
 
   return { x: worldX, y: worldY }
-}
-
-const ResizePlugin: StagePlugin = {
-  name: 'resize',
-  events: {
-    onMouseDown: (event, stage) => {
-      const { setDragStart, state, mousePosition } = stage
-
-      const target = event.target as HTMLElement
-      const resizeDir = target.dataset.resizeDir
-      const elementId = target.closest('[data-element-id]')?.getAttribute('data-element-id')
-
-      if (target.dataset.sicType === 'resize-handle' && elementId && state.elements[elementId]) {
-        event.stopPropagation()
-        setDragStart({
-          stageX: mousePosition().x,
-          stageY: mousePosition().y,
-          target: {
-            type: 'resize',
-            elementId,
-            resizeDir,
-            initialRect: { ...state.elements[elementId].rect },
-          },
-        })
-      }
-    },
-    onWindowMouseMove: (event, stage) => {
-      const { setState, dragStart, camera, mousePosition } = stage
-
-      const dragStartValue = dragStart()
-      const currentCamera = camera()
-
-      if (!dragStartValue) return
-
-      const dx = mousePosition().x - dragStartValue.stageX
-      const dy = mousePosition().y - dragStartValue.stageY
-
-      if (dragStartValue.target.type === 'resize') {
-        event.preventDefault()
-        event.stopPropagation()
-        const { elementId, resizeDir, initialRect } = dragStartValue.target
-        if (!elementId || !resizeDir || !initialRect) return
-        let { x, y, width, height } = initialRect
-
-        const MIN_SIZE = 20 / currentCamera.zoom
-
-        if (resizeDir.includes('right')) width = Math.max(MIN_SIZE, initialRect.width + dx)
-        if (resizeDir.includes('left')) width = Math.max(MIN_SIZE, initialRect.width - dx)
-        if (resizeDir.includes('bottom')) height = Math.max(MIN_SIZE, initialRect.height + dy)
-        if (resizeDir.includes('top')) height = Math.max(MIN_SIZE, initialRect.height - dy)
-
-        if (event.shiftKey) {
-          const aspectRatio = initialRect.width / initialRect.height
-          if (Math.abs(dx) > Math.abs(dy)) {
-            height = width / aspectRatio
-          } else {
-            width = height * aspectRatio
-          }
-        }
-
-        if (resizeDir.includes('left')) x = initialRect.x + initialRect.width - width
-        if (resizeDir.includes('top')) y = initialRect.y + initialRect.height - height
-
-        setState('elements', elementId, 'rect', prev => ({
-          ...prev,
-          x,
-          y,
-          width,
-          height,
-        }))
-      }
-    },
-  },
 }

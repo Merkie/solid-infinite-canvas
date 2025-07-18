@@ -13,101 +13,13 @@ import {
   Setter,
   ValidComponent,
   Component,
-  JSX,
 } from 'solid-js'
 import { createStore, SetStoreFunction, Store } from 'solid-js/store'
 import { Dynamic } from 'solid-js/web'
 import gsap from 'gsap'
+import styles from './styles'
 
 // --- INLINE STYLES ---
-
-const styles: Record<string, JSX.CSSProperties> = {
-  stage: {
-    overflow: 'hidden',
-    position: 'absolute',
-    top: '0px',
-    left: '0px',
-    width: '100%',
-    height: '100%',
-    'box-sizing': 'border-box',
-    outline: 'none',
-  },
-  view: {
-    position: 'absolute',
-    left: '0px',
-    top: '0px',
-    width: '100%',
-    height: '100%',
-    'transform-origin': '0 0',
-  },
-  element: {
-    position: 'absolute',
-    'box-sizing': 'border-box',
-  },
-  backgroundGrid: {
-    'pointer-events': 'none',
-    position: 'absolute',
-    top: '0px',
-    left: '0px',
-    width: '100%',
-    height: '100%',
-    'background-color': '#ffffff',
-    'background-image':
-      'linear-gradient(#eeeeee 1px, transparent 1px), linear-gradient(90deg, #eeeeee 1px, transparent 1px)',
-  },
-  selectionBox: {
-    border: '1px solid #0ea5e9',
-    'background-color': 'rgba(14, 165, 233, 0.1)',
-    position: 'absolute',
-    'z-index': 9999,
-    'box-sizing': 'border-box',
-    'transform-origin': '0 0',
-  },
-  transformControls: {
-    position: 'absolute',
-    top: '0px',
-    left: '0px',
-    width: '100%',
-    height: '100%',
-    'pointer-events': 'none',
-    border: '1px solid #0ea5e9',
-    'box-sizing': 'border-box',
-  },
-  resizeHandle: {
-    position: 'absolute',
-    border: '1px solid #0ea5e9',
-    'background-color': 'white',
-    height: '8px',
-    width: '8px',
-    'pointer-events': 'all',
-    'box-sizing': 'border-box',
-    'z-index': 10000,
-  },
-  resizeHandleTopLeft: {
-    top: '0px',
-    left: '0px',
-    transform: 'translate(-50%, -50%)',
-    cursor: 'nwse-resize',
-  },
-  resizeHandleTopRight: {
-    top: '0px',
-    right: '0px',
-    transform: 'translate(50%, -50%)',
-    cursor: 'nesw-resize',
-  },
-  resizeHandleBottomLeft: {
-    bottom: '0px',
-    left: '0px',
-    transform: 'translate(-50%, 50%)',
-    cursor: 'nesw-resize',
-  },
-  resizeHandleBottomRight: {
-    bottom: '0px',
-    right: '0px',
-    transform: 'translate(50%, 50%)',
-    cursor: 'nwse-resize',
-  },
-}
 
 // --- STATE AND TYPE DEFINITIONS ---
 
@@ -136,8 +48,6 @@ type DragTarget = {
   type: string
   initialRects?: Map<string, ElementState['rect']>
   elementId?: string
-  resizeDir?: string
-  initialRect?: ElementState['rect']
   ext?: Record<string, any>
 }
 
@@ -744,40 +654,6 @@ const ElementRenderer: ElementRendererComponent = props => {
           </Show>
         )}
       </For>
-    </Show>
-  )
-}
-
-export const ElementTransformControls: Component<{ elementId: string }> = props => {
-  const { state, clientId } = useStage()
-  return (
-    <Show when={state.selectedElements[clientId]?.includes(props.elementId)}>
-      <div style={styles.transformControls}>
-        <div
-          data-sic-type="resize-handle"
-          data-element-id={props.elementId}
-          data-resize-dir="top left"
-          style={{ ...styles.resizeHandle, ...styles.resizeHandleTopLeft }}
-        />
-        <div
-          data-sic-type="resize-handle"
-          data-element-id={props.elementId}
-          data-resize-dir="top right"
-          style={{ ...styles.resizeHandle, ...styles.resizeHandleTopRight }}
-        />
-        <div
-          data-sic-type="resize-handle"
-          data-element-id={props.elementId}
-          data-resize-dir="bottom left"
-          style={{ ...styles.resizeHandle, ...styles.resizeHandleBottomLeft }}
-        />
-        <div
-          data-sic-type="resize-handle"
-          data-element-id={props.elementId}
-          data-resize-dir="bottom right"
-          style={{ ...styles.resizeHandle, ...styles.resizeHandleBottomRight }}
-        />
-      </div>
     </Show>
   )
 }
