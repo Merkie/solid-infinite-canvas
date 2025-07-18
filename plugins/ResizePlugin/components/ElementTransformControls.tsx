@@ -1,9 +1,12 @@
 import { Component, Show } from 'solid-js'
-import { useStage } from 'src'
+import { StageContextType } from 'src'
 import styles from 'src/styles'
 
-const ElementTransformControls: Component<{ elementId: string }> = props => {
-  const { state, clientId } = useStage()
+const ElementTransformControls: Component<{
+  elementId: string
+  stagectx: StageContextType
+}> = props => {
+  const { state, clientId } = props.stagectx
   return (
     <Show when={state.selectedElements[clientId]?.includes(props.elementId)}>
       <div style={styles.transformControls}>

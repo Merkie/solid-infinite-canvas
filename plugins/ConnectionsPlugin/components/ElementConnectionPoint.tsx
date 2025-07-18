@@ -1,11 +1,12 @@
 import { Component, Show } from 'solid-js'
-import { useStage } from 'src'
+import { StageContextType } from 'src'
 
 export const ElementConnectionPoint: Component<{
   elementId: string
   type: 'input' | 'output'
+  stagectx: StageContextType
 }> = props => {
-  const { state } = useStage()
+  const { state } = props.stagectx
   const element = state.elements[props.elementId]
 
   return (
