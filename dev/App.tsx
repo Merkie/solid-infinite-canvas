@@ -1,4 +1,5 @@
-import { createEffect, createSignal, For, onMount, Show } from 'solid-js'
+import { createId } from '@paralleldrive/cuid2'
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import {
   StagePlugin,
   CanvasElementComponent,
@@ -35,6 +36,7 @@ const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
         }}
       >
         <div
+          draggable={false}
           style={{
             'text-shadow': '1px 1px 2px black',
             'pointer-events': 'none',
@@ -80,6 +82,7 @@ const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
         }}
       >
         <div
+          draggable={false}
           style={{
             'text-shadow': '1px 1px 2px black',
             'pointer-events': 'none',
@@ -110,6 +113,66 @@ type ConnectionWire = {
 
 const ConnectionsPlugin: StagePlugin = {
   name: 'connections',
+  events: {
+    onMouseDown: (event, stage) => {
+      const { setDragStart, state, mousePosition } = stage
+
+      const target = event.target as HTMLElement
+      const connectionType = target.dataset.connectionPoint
+      const elementIdFromConnection = target.dataset.elementId
+
+      if (connectionType && elementIdFromConnection && state.elements[elementIdFromConnection]) {
+        event.stopPropagation()
+        setDragStart({
+          stageX: mousePosition().x,
+          stageY: mousePosition().y,
+          target: {
+            type: 'connection',
+            elementId: elementIdFromConnection,
+            ext: { connectionType },
+          },
+        })
+      }
+    },
+    onWindowMouseUp: (event, stage) => {
+      const { state, dragStart, setState } = stage
+
+      const dragStartValue = dragStart()
+      if (!dragStartValue) return
+
+      if (dragStartValue.target.type === 'connection') {
+        const { elementId: fromElementId } = dragStartValue.target
+        const fromType = dragStartValue.target.ext?.connectionType
+        const target = event.target as HTMLElement
+        const toElementId = target.closest('[data-element-id]')?.getAttribute('data-element-id')
+        const toType = target.dataset.connectionPoint
+        if (
+          toElementId &&
+          toType &&
+          fromElementId &&
+          fromType &&
+          fromElementId !== toElementId &&
+          fromType !== toType
+        ) {
+          const newId = createId()
+          const from = fromType === 'output' ? fromElementId : toElementId
+          const to = fromType === 'input' ? fromElementId : toElementId
+          const connectionWires = state.ext.connectionWires || {}
+          const alreadyExists = Object.values(connectionWires).some(
+            (wire: any) => wire.fromElementId === from && wire.toElementId === to,
+          )
+          if (!alreadyExists) {
+            if (!state.ext.connectionWires) setState('ext', 'connectionWires', {})
+            setState('ext', 'connectionWires', newId, {
+              id: newId,
+              fromElementId: from,
+              toElementId: to,
+            })
+          }
+        }
+      }
+    },
+  },
   components: {
     viewBack: () => {
       const { state, dragStart } = useStage()
@@ -247,7 +310,7 @@ function App() {
                 rectangle: RectangleElement,
               },
             }}
-            plugins={[ConnectionsPlugin]}
+            plugins={[ConnectionsPlugin, ResizePlugin]}
           />
           <div
             style={{
@@ -301,7 +364,7 @@ function App() {
                 rectangle: RectangleElement,
               },
             }}
-            plugins={[ConnectionsPlugin]}
+            plugins={[ConnectionsPlugin, ResizePlugin]}
           />
           <div
             style={{
@@ -312,7 +375,9 @@ function App() {
               'flex-direction': 'column',
             }}
           >
-            <button onClick={() => actions.centerContent({ animate: true })}>Center Content</button>
+            <button onClick={() => actions2.centerContent({ animate: true })}>
+              Center Content
+            </button>
             <div
               style={{
                 display: 'flex',
@@ -324,16 +389,16 @@ function App() {
                 style={{
                   height: 'fit-content',
                 }}
-                onClick={() => actions.zoomIn()}
+                onClick={() => actions2.zoomIn()}
               >
                 +
               </button>
-              <p>{Math.round(stagectx.camera().zoom * 100)}%</p>
+              <p>{Math.round(stagectx2.camera().zoom * 100)}%</p>
               <button
                 style={{
                   height: 'fit-content',
                 }}
-                onClick={() => actions.zoomOut()}
+                onClick={() => actions2.zoomOut()}
               >
                 -
               </button>
@@ -386,14 +451,11 @@ function createDynamicSCurvePath(x1: number, y1: number, x2: number, y2: number)
 }
 
 function ConnectionCursor() {
-  const { dragStart, camera, mousePosition } = useStage()
+  const { dragStart, mousePosition } = useStage()
 
   const dragInfo = dragStart()!.target
-  const currentCamera = camera()
   const fromCoords = () =>
     getConnectionPointCoords(dragInfo.elementId!, dragInfo.ext?.connectionType!)
-  const worldMouseX = () => (mousePosition().x - currentCamera.x) / currentCamera.zoom
-  const worldMouseY = () => (mousePosition().y - currentCamera.y) / currentCamera.zoom
 
   const path = () => {
     const from = fromCoords()
@@ -401,8 +463,8 @@ function ConnectionCursor() {
 
     const startX = from.x
     const startY = from.y
-    const endX = worldMouseX()
-    const endY = worldMouseY()
+    const endX = mousePosition().x
+    const endY = mousePosition().y
 
     if (dragInfo.ext?.connectionType === 'output') {
       return createDynamicSCurvePath(startX, startY, endX, endY)
@@ -442,4 +504,77 @@ function getConnectionPointCoords(
   const worldY = (viewportY - viewRect.top) / currentCamera.zoom
 
   return { x: worldX, y: worldY }
+}
+
+const ResizePlugin: StagePlugin = {
+  name: 'resize',
+  events: {
+    onMouseDown: (event, stage) => {
+      const { setDragStart, state, mousePosition } = stage
+
+      const target = event.target as HTMLElement
+      const resizeDir = target.dataset.resizeDir
+      const elementId = target.closest('[data-element-id]')?.getAttribute('data-element-id')
+
+      if (target.dataset.sicType === 'resize-handle' && elementId && state.elements[elementId]) {
+        event.stopPropagation()
+        setDragStart({
+          stageX: mousePosition().x,
+          stageY: mousePosition().y,
+          target: {
+            type: 'resize',
+            elementId,
+            resizeDir,
+            initialRect: { ...state.elements[elementId].rect },
+          },
+        })
+      }
+    },
+    onWindowMouseMove: (event, stage) => {
+      const { setState, dragStart, camera, mousePosition } = stage
+
+      const dragStartValue = dragStart()
+      const currentCamera = camera()
+
+      if (!dragStartValue) return
+
+      const dx = mousePosition().x - dragStartValue.stageX
+      const dy = mousePosition().y - dragStartValue.stageY
+
+      if (dragStartValue.target.type === 'resize') {
+        event.preventDefault()
+        event.stopPropagation()
+        const { elementId, resizeDir, initialRect } = dragStartValue.target
+        if (!elementId || !resizeDir || !initialRect) return
+        let { x, y, width, height } = initialRect
+
+        const MIN_SIZE = 20 / currentCamera.zoom
+
+        if (resizeDir.includes('right')) width = Math.max(MIN_SIZE, initialRect.width + dx)
+        if (resizeDir.includes('left')) width = Math.max(MIN_SIZE, initialRect.width - dx)
+        if (resizeDir.includes('bottom')) height = Math.max(MIN_SIZE, initialRect.height + dy)
+        if (resizeDir.includes('top')) height = Math.max(MIN_SIZE, initialRect.height - dy)
+
+        if (event.shiftKey) {
+          const aspectRatio = initialRect.width / initialRect.height
+          if (Math.abs(dx) > Math.abs(dy)) {
+            height = width / aspectRatio
+          } else {
+            width = height * aspectRatio
+          }
+        }
+
+        if (resizeDir.includes('left')) x = initialRect.x + initialRect.width - width
+        if (resizeDir.includes('top')) y = initialRect.y + initialRect.height - height
+
+        setState('elements', elementId, 'rect', prev => ({
+          ...prev,
+          x,
+          y,
+          width,
+          height,
+        }))
+      }
+    },
+  },
 }

@@ -379,6 +379,14 @@ export type StagePlugin = {
     viewFront?: ValidComponent
     viewBack?: ValidComponent
   }
+  events?: {
+    onMouseDown?: (event: MouseEvent, stage: StageContextType) => void
+    onWindowMouseMove?: (event: MouseEvent, stage: StageContextType) => void
+    onWindowMouseUp?: (event: MouseEvent, stage: StageContextType) => void
+    onKeyDown?: (event: KeyboardEvent, stage: StageContextType) => void
+    onKeyUp?: (event: KeyboardEvent, stage: StageContextType) => void
+    onWheel?: (event: WheelEvent, stage: StageContextType) => void
+  }
 }
 
 export const Stage: Component<{
@@ -394,6 +402,7 @@ export const Stage: Component<{
 }
 
 function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[] }) {
+  const stage = useStage()
   const {
     stageId,
     state,
@@ -408,27 +417,18 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
     setPanning,
     setContainerSize,
     actions,
-  } = useStage()
+  } = stage
 
   let stageRef: HTMLDivElement | undefined
 
-  function getResizeCursor(resizeDir: string | undefined) {
-    if (!resizeDir) return 'default'
-    if (resizeDir === 'top left' || resizeDir === 'bottom right') return 'nwse-resize'
-    if (resizeDir === 'top right' || resizeDir === 'bottom left') return 'nesw-resize'
-    return 'default'
-  }
-
-  function getStageCoordinates(event: MouseEvent) {
-    const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect()
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    }
-  }
-
   function onMouseDown(event: MouseEvent) {
-    const { x: stageX, y: stageY } = getStageCoordinates(event)
+    if (!stageRef) return
+    // --- 1. Correctly calculate world coordinates on mousedown ---
+    const rect = stageRef.getBoundingClientRect()
+    const currentCamera = camera()
+    const worldX = (event.clientX - rect.left - currentCamera.x) / currentCamera.zoom
+    const worldY = (event.clientY - rect.top - currentCamera.y) / currentCamera.zoom
+    setMousePosition({ x: worldX, y: worldY })
 
     if (event.button === 1 || (event.button === 0 && panning())) {
       event.preventDefault()
@@ -436,36 +436,15 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
     }
 
     const target = event.target as HTMLElement
-    const connectionType = target.dataset.connectionPoint
-    const elementIdFromConnection = target.dataset.elementId
     const elementDiv = target.closest('[data-element-id]') as unknown as HTMLElement | null
     const elementIdFromDiv = elementDiv?.dataset.elementId
-    const resizeDir = target.dataset.resizeDir
+    const sicType = target.dataset.sicType
 
-    if (connectionType && elementIdFromConnection && state.elements[elementIdFromConnection]) {
-      event.stopPropagation()
-      setDragStart({
-        stageX,
-        stageY,
-        target: {
-          type: 'connection',
-          elementId: elementIdFromConnection,
-          ext: { connectionType },
-        },
-      })
-    } else if (resizeDir && elementIdFromDiv && state.elements[elementIdFromDiv]) {
-      event.stopPropagation()
-      setDragStart({
-        stageX,
-        stageY,
-        target: {
-          type: 'resize',
-          elementId: elementIdFromDiv,
-          resizeDir,
-          initialRect: { ...state.elements[elementIdFromDiv].rect },
-        },
-      })
-    } else if (elementIdFromDiv && state.elements[elementIdFromDiv]) {
+    if (
+      (!sicType || sicType === 'element') &&
+      elementIdFromDiv &&
+      state.elements[elementIdFromDiv]
+    ) {
       batch(() => {
         if (!state.selectedElements[clientId]?.includes(elementIdFromDiv)) {
           setState('selectedElements', clientId, [elementIdFromDiv])
@@ -479,44 +458,39 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         }
 
         setDragStart({
-          stageX,
-          stageY,
+          stageX: worldX, // Use correct world coordinates
+          stageY: worldY, // Use correct world coordinates
           target: { type: 'elements', initialRects },
         })
       })
-    } else {
+    } else if (sicType === 'view') {
       setState('selectedElements', clientId, [])
-      setDragStart({ stageX, stageY, target: { type: 'stage' } })
+      setDragStart({
+        stageX: worldX, // Use correct world coordinates
+        stageY: worldY, // Use correct world coordinates
+        target: { type: 'stage' },
+      })
     }
 
-    // Always add listeners if a drag operation has started
-    // if (dragStart()) {
-    //   window.addEventListener('mousemove', onWindowMouseMove)
-    //   window.addEventListener('mouseup', onWindowMouseUp)
-    // }
-  }
-
-  function onMouseMove(event: MouseEvent) {
-    const { x: stageX, y: stageY } = getStageCoordinates(event)
-    setMousePosition({ x: stageX, y: stageY })
-    if (dragStart()) return
-    const currentCamera = camera()
-    const worldX = (stageX - currentCamera.x) / currentCamera.zoom
-    const worldY = (stageY - currentCamera.y) / currentCamera.zoom
-    setState('cursors', clientId, { x: worldX, y: worldY })
+    for (const plugin of props.plugins) {
+      plugin.events?.onMouseDown?.(event, stage)
+    }
   }
 
   function onWindowMouseMove(event: MouseEvent) {
-    const dragStartValue = dragStart()
-    if (!dragStartValue) return
+    if (!stageRef) return
 
-    // Re-calculate stageX/stageY based on the window event
-    const rect = stageRef!.getBoundingClientRect()
-    const stageX = event.clientX - rect.left
-    const stageY = event.clientY - rect.top
+    // --- 2. Correctly calculate world coordinates on mousemove ---
+    const rect = stageRef.getBoundingClientRect()
     const currentCamera = camera()
+    const worldX = (event.clientX - rect.left - currentCamera.x) / currentCamera.zoom
+    const worldY = (event.clientY - rect.top - currentCamera.y) / currentCamera.zoom
+    setMousePosition({ x: worldX, y: worldY })
 
-    setMousePosition({ x: stageX, y: stageY })
+    const dragStartValue = dragStart()
+
+    // Update multiplayer cursor position
+    setState('cursors', clientId, { x: worldX, y: worldY })
 
     if (panning()) {
       setCamera(prev => ({
@@ -527,45 +501,18 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
       return
     }
 
-    const worldX = (stageX - currentCamera.x) / currentCamera.zoom
-    const worldY = (stageY - currentCamera.y) / currentCamera.zoom
-    setState('cursors', clientId, { x: worldX, y: worldY })
-
-    const dx = (stageX - dragStartValue.stageX) / currentCamera.zoom
-    const dy = (stageY - dragStartValue.stageY) / currentCamera.zoom
-
-    if (dragStartValue.target.type === 'resize') {
-      const { elementId, resizeDir, initialRect } = dragStartValue.target
-      if (!elementId || !resizeDir || !initialRect) return
-      let { x, y, width, height } = initialRect
-
-      const MIN_SIZE = 20 / currentCamera.zoom
-
-      if (resizeDir.includes('right')) width = Math.max(MIN_SIZE, initialRect.width + dx)
-      if (resizeDir.includes('left')) width = Math.max(MIN_SIZE, initialRect.width - dx)
-      if (resizeDir.includes('bottom')) height = Math.max(MIN_SIZE, initialRect.height + dy)
-      if (resizeDir.includes('top')) height = Math.max(MIN_SIZE, initialRect.height - dy)
-
-      if (event.shiftKey) {
-        const aspectRatio = initialRect.width / initialRect.height
-        if (Math.abs(dx) > Math.abs(dy)) {
-          height = width / aspectRatio
-        } else {
-          width = height * aspectRatio
-        }
+    if (!dragStartValue) {
+      for (const plugin of props.plugins) {
+        plugin.events?.onWindowMouseMove?.(event, stage)
       }
+      return
+    }
 
-      if (resizeDir.includes('left')) x = initialRect.x + initialRect.width - width
-      if (resizeDir.includes('top')) y = initialRect.y + initialRect.height - height
+    // --- 3. Calculate delta in world space ---
+    const dx = worldX - dragStartValue.stageX
+    const dy = worldY - dragStartValue.stageY
 
-      setState('elements', elementId, 'rect', prev => ({
-        ...prev,
-        x,
-        y,
-        width,
-        height,
-      }))
-    } else if (dragStartValue.target.type === 'elements') {
+    if (dragStartValue.target.type === 'elements') {
       batch(() => {
         for (const [id, initialRect] of dragStartValue.target.initialRects!.entries()) {
           setState('elements', id, 'rect', prev => ({
@@ -576,8 +523,8 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         }
       })
     } else if (dragStartValue.target.type === 'stage') {
-      const startWorldX = (dragStartValue.stageX - currentCamera.x) / currentCamera.zoom
-      const startWorldY = (dragStartValue.stageY - currentCamera.y) / currentCamera.zoom
+      const startWorldX = dragStartValue.stageX
+      const startWorldY = dragStartValue.stageY
       setState('selectionBoxes', clientId, {
         x: Math.min(startWorldX, worldX),
         y: Math.min(startWorldY, worldY),
@@ -585,6 +532,10 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         height: Math.abs(worldY - startWorldY),
         hidden: false,
       })
+    }
+
+    for (const plugin of props.plugins) {
+      plugin.events?.onWindowMouseMove?.(event, stage)
     }
   }
 
@@ -608,39 +559,10 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         .map(([id]) => id)
       setState('selectedElements', clientId, selected)
       setState('selectionBoxes', clientId, 'hidden', true)
-    } else if (dragStartValue?.target.type === 'connection') {
-      const { elementId: fromElementId } = dragStartValue.target
-      const fromType = dragStartValue.target.ext?.connectionType
-      const target = event.target as HTMLElement
-      const toElementId = target.closest('[data-element-id]')?.getAttribute('data-element-id')
-      const toType = target.dataset.connectionPoint
+    }
 
-      if (
-        toElementId &&
-        toType &&
-        fromElementId &&
-        fromType &&
-        fromElementId !== toElementId &&
-        fromType !== toType
-      ) {
-        const newId = createId()
-        const from = fromType === 'output' ? fromElementId : toElementId
-        const to = fromType === 'input' ? fromElementId : toElementId
-
-        const connectionWires = state.ext.connectionWires || {}
-        const alreadyExists = Object.values(connectionWires).some(
-          (wire: any) => wire.fromElementId === from && wire.toElementId === to,
-        )
-
-        if (!alreadyExists) {
-          if (!state.ext.connectionWires) setState('ext', 'connectionWires', {})
-          setState('ext', 'connectionWires', newId, {
-            id: newId,
-            fromElementId: from,
-            toElementId: to,
-          })
-        }
-      }
+    for (const plugin of props.plugins) {
+      plugin.events?.onWindowMouseUp?.(event, stage)
     }
 
     setDragStart(undefined)
@@ -653,6 +575,10 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
       x: prev.x - event.deltaX,
       y: prev.y - event.deltaY,
     }))
+
+    for (const plugin of props.plugins) {
+      plugin.events?.onWheel?.(event, stage)
+    }
   }
 
   function onKeyDown(event: KeyboardEvent) {
@@ -668,10 +594,18 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         actions.zoomOut()
       }
     }
+
+    for (const plugin of props.plugins) {
+      plugin.events?.onKeyDown?.(event, stage)
+    }
   }
 
   function onKeyUp(event: KeyboardEvent) {
     if (event.key === ' ') setPanning(false)
+
+    for (const plugin of props.plugins) {
+      plugin.events?.onKeyUp?.(event, stage)
+    }
   }
 
   onMount(() => {
@@ -681,7 +615,6 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
       height: stageRef.clientHeight,
     })
     stageRef.addEventListener('mousedown', onMouseDown)
-    stageRef.addEventListener('mousemove', onMouseMove)
     stageRef.addEventListener('keydown', onKeyDown)
     stageRef.addEventListener('keyup', onKeyUp)
     stageRef.addEventListener('wheel', onWheel, { passive: false })
@@ -692,7 +625,6 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
   onCleanup(() => {
     if (!stageRef) return
     stageRef.removeEventListener('mousedown', onMouseDown)
-    stageRef.removeEventListener('mousemove', onMouseMove)
     stageRef.removeEventListener('keydown', onKeyDown)
     stageRef.removeEventListener('keyup', onKeyUp)
     stageRef.removeEventListener('wheel', onWheel)
@@ -703,23 +635,17 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
   return (
     <main
       ref={stageRef}
-      data-cis-type="stage"
+      data-sic-type="stage"
       data-stage-id={stageId}
       tabIndex={0}
       style={{
         ...styles.stage,
-        cursor:
-          dragStart()?.target.type === 'resize'
-            ? getResizeCursor(dragStart()?.target.resizeDir)
-            : panning()
-            ? 'grabbing'
-            : dragStart()?.target.type === 'connection'
-            ? 'crosshair'
-            : 'default',
+        cursor: panning() ? (dragStart()?.target ? 'grabbing' : 'grab') : 'auto',
       }}
     >
       <Dynamic component={props.components.background ?? StageBackground} />
       <div
+        data-sic-type="view"
         data-view-stage-id={stageId}
         style={{
           ...styles.view,
@@ -739,6 +665,7 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         <For each={Object.entries(state.elements)}>
           {([id, element]) => (
             <div
+              data-sic-type="element"
               data-element-id={id}
               style={{
                 ...styles.element,
@@ -798,6 +725,7 @@ function StageBackground() {
         ...styles.backgroundGrid,
         'background-position': `${camera().x}px ${camera().y}px`,
         'background-size': `${40 * camera().zoom}px ${40 * camera().zoom}px`,
+        'pointer-events': 'none',
       }}
     ></div>
   )
@@ -826,21 +754,25 @@ export const ElementTransformControls: Component<{ elementId: string }> = props 
     <Show when={state.selectedElements[clientId]?.includes(props.elementId)}>
       <div style={styles.transformControls}>
         <div
+          data-sic-type="resize-handle"
           data-element-id={props.elementId}
           data-resize-dir="top left"
           style={{ ...styles.resizeHandle, ...styles.resizeHandleTopLeft }}
         />
         <div
+          data-sic-type="resize-handle"
           data-element-id={props.elementId}
           data-resize-dir="top right"
           style={{ ...styles.resizeHandle, ...styles.resizeHandleTopRight }}
         />
         <div
+          data-sic-type="resize-handle"
           data-element-id={props.elementId}
           data-resize-dir="bottom left"
           style={{ ...styles.resizeHandle, ...styles.resizeHandleBottomLeft }}
         />
         <div
+          data-sic-type="resize-handle"
           data-element-id={props.elementId}
           data-resize-dir="bottom right"
           style={{ ...styles.resizeHandle, ...styles.resizeHandleBottomRight }}
@@ -860,6 +792,7 @@ export const ElementConnectionPoint: Component<{
   return (
     <Show when={element}>
       <div
+        data-sic-type="connection-point"
         data-element-id={props.elementId}
         data-connection-point={props.type}
         style={{
