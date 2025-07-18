@@ -25,6 +25,10 @@
   "browser": {},
   "exports": {
     ".": {
+      "solid": {
+        "development": "./dist/index/dev.jsx",
+        "import": "./dist/index/index.jsx"
+      },
       "development": {
         "import": {
           "types": "./dist/index/index.d.ts",
@@ -37,6 +41,7 @@
       }
     },
     "./ConnectionsPlugin": {
+      "solid": "./dist/ConnectionsPlugin/index.jsx",
       "import": {
         "types": "./dist/ConnectionsPlugin/index.d.ts",
         "default": "./dist/ConnectionsPlugin/index.js"
