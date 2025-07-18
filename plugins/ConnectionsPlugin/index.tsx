@@ -1,6 +1,6 @@
 import { createId } from '@paralleldrive/cuid2'
 import { createEffect, createSignal, For, onMount, Show } from 'solid-js'
-import { StagePlugin, useStage } from 'src'
+import { StageContextType, StagePlugin, useStage } from 'src'
 import { ElementConnectionPoint } from './components/ElementConnectionPoint'
 
 type ConnectionWire = {
@@ -72,8 +72,8 @@ const ConnectionsPlugin: StagePlugin = {
     },
   },
   components: {
-    viewBack: () => {
-      const { state, dragStart } = useStage()
+    viewBack: ({ stage }: { stage: StageContextType }) => {
+      const { state, dragStart } = stage
 
       return (
         <svg

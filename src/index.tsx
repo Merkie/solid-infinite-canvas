@@ -62,7 +62,7 @@ type StageActions = {
   zoomOut: () => void
 }
 
-type StageContextType = {
+export type StageContextType = {
   stageId: string
   state: Store<StageState>
   setState: SetStoreFunction<StageState>
@@ -566,7 +566,7 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         <For each={props.plugins}>
           {plugin => (
             <Show when={plugin.components?.viewBack}>
-              <Dynamic component={plugin.components!.viewBack} />
+              <Dynamic component={plugin.components!.viewBack} stage={stage} />
             </Show>
           )}
         </For>
@@ -618,7 +618,7 @@ function StageCanvas(props: { components: StageComponents; plugins: StagePlugin[
         <For each={props.plugins}>
           {plugin => (
             <Show when={plugin.components?.viewFront}>
-              <Dynamic component={plugin.components!.viewFront} />
+              <Dynamic component={plugin.components!.viewFront} stage={stage} />
             </Show>
           )}
         </For>
