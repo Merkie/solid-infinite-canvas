@@ -14,6 +14,7 @@ import {
   ValidComponent,
   Component,
   JSX,
+  createEffect,
 } from 'solid-js'
 import { createStore, SetStoreFunction, Store } from 'solid-js/store'
 import { Dynamic } from 'solid-js/web'
@@ -117,7 +118,6 @@ type ElementState = {
   props: Record<string, any>
 }
 
-// NEW: Type for a connection wire
 type ConnectionWire = {
   id: string
   fromElementId: string
@@ -130,7 +130,6 @@ type UncreatedElementState = Omit<ElementState, 'rect'> & {
 
 type StageState = {
   elements: Record<string, ElementState>
-  // NEW: State for connection wires
   connectionWires: Record<string, ConnectionWire>
   cursors: Record<string, { x: number; y: number }>
   selectionBoxes: Record<
@@ -144,7 +143,6 @@ type DragTarget = {
   type: string
   initialRects?: Map<string, ElementState['rect']>
   elementId?: string
-  // NEW: Property to identify connection drag type
   connectionType?: 'input' | 'output'
   resizeDir?: string
   initialRect?: ElementState['rect']
@@ -204,17 +202,23 @@ type CreateStageActions = (stage: StageContextWithoutActions) => StageActions
 
 // --- UTILITY FUNCTIONS ---
 /**
- * Creates an SVG path string for an S-shaped curve.
- * @param x1 - Start X coordinate
- * @param y1 - Start Y coordinate
- * @param x2 - End X coordinate
- * @param y2 - End Y coordinate
- * @returns The SVG path data string.
+ * Creates an SVG path string for an S-shaped curve, dynamically choosing
+ * between a horizontal or vertical orientation for the best look.
  */
-function createSCurvePath(x1: number, y1: number, x2: number, y2: number): string {
-  const horizontalDistance = Math.abs(x1 - x2)
-  const handleOffset = Math.max(50, horizontalDistance * 0.4)
-  return `M ${x1} ${y1} C ${x1 + handleOffset} ${y1}, ${x2 - handleOffset} ${y2}, ${x2} ${y2}`
+function createDynamicSCurvePath(x1: number, y1: number, x2: number, y2: number): string {
+  const dx = Math.abs(x1 - x2)
+  const dy = Math.abs(y1 - y2)
+
+  // Use a horizontal curve if the connection is mostly horizontal
+  if (dx > dy) {
+    const handleOffset = Math.max(50, dx * 0.4)
+    return `M ${x1} ${y1} C ${x1 + handleOffset} ${y1}, ${x2 - handleOffset} ${y2}, ${x2} ${y2}`
+  }
+  // Otherwise, use a vertical curve
+  else {
+    const handleOffset = Math.max(50, dy * 0.4)
+    return `M ${x1} ${y1} C ${x1} ${y1 + handleOffset}, ${x2} ${y2 - handleOffset}, ${x2} ${y2}`
+  }
 }
 
 const createStageActions: CreateStageActions = (stage: StageContextWithoutActions) => {
@@ -232,47 +236,29 @@ const createStageActions: CreateStageActions = (stage: StageContextWithoutAction
   const centerContent: StageActions['centerContent'] = options => {
     const elements = Object.values(stage.state.elements)
     if (elements.length === 0) return
-
-    // 1. Define your desired padding
     const margin = options?.margin || 50
-
-    // 2. Find the bounding box of all elements
     const minX = Math.min(...elements.map(el => el.rect.x))
     const minY = Math.min(...elements.map(el => el.rect.y))
     const maxX = Math.max(...elements.map(el => el.rect.x + el.rect.width))
     const maxY = Math.max(...elements.map(el => el.rect.y + el.rect.height))
-
     const contentWidth = maxX - minX
     const contentHeight = maxY - minY
-
-    // Handle case where content has no size to prevent division by zero
     if (contentWidth === 0 || contentHeight === 0) return
-
-    // 3. Calculate the required zoom level to fit the content
     const zoomX = (stage.containerSize().width - margin * 2) / contentWidth
     const zoomY = (stage.containerSize().height - margin * 2) / contentHeight
-
-    // Use the smaller zoom level to ensure everything fits on the screen
     const newZoom = Math.min(zoomX, zoomY)
-
-    // 4. Calculate the center of the content
     const centerX = (minX + maxX) / 2
     const centerY = (minY + maxY) / 2
-
-    // 5. Center the view, adjusting the camera's position for the new zoom level
     const newCamera = {
       x: stage.containerSize().width / 2 - centerX * newZoom,
       y: stage.containerSize().height / 2 - centerY * newZoom,
       zoom: newZoom,
     }
-
     const currentCamera = stage.camera()
-
     if (!options?.animate) {
       stage.setCamera(newCamera)
     } else {
       gsap.killTweensOf(currentCamera)
-
       gsap.to(currentCamera, {
         duration: 0.2,
         ease: 'power2.out',
@@ -357,7 +343,6 @@ const createStageActions: CreateStageActions = (stage: StageContextWithoutAction
 export const createStageContext: CreateStageContext = () => {
   const [state, setState] = createStore<StageState>({
     elements: {},
-    // NEW: Initialize connectionWires
     connectionWires: {},
     cursors: {},
     selectionBoxes: {},
@@ -424,21 +409,6 @@ export const Stage: Component<{
   )
 }
 
-function getConnectionPointCoords(
-  elementId: string,
-  type: 'input' | 'output',
-): { x: number; y: number } | null {
-  const { state } = useStage()
-
-  const element = state.elements[elementId]
-  if (!element) return null
-
-  const x = element.rect.x + (type === 'input' ? 0 : element.rect.width)
-  const y = element.rect.y + element.rect.height / 2
-
-  return { x, y }
-}
-
 function StageCanvas(props: { components: StageComponents }) {
   const {
     state,
@@ -452,10 +422,42 @@ function StageCanvas(props: { components: StageComponents }) {
     panning,
     setPanning,
     setContainerSize,
+    actions,
   } = useStage()
 
   let stageRef: HTMLDivElement | undefined
   let viewRef: HTMLDivElement | undefined
+
+  /**
+   * Finds a connection point's DOM element and converts its on-screen
+   * position to the canvas's local "world" coordinates.
+   */
+  function getConnectionPointCoords(
+    elementId: string,
+    type: 'input' | 'output',
+  ): { x: number; y: number } | null {
+    if (!viewRef) return null
+
+    // 1. Find the connection point's DOM element using its data attributes.
+    const selector = `[data-element-id="${elementId}"] [data-connection-point="${type}"]`
+    const pointEl = viewRef.querySelector(selector)
+    if (!pointEl) return null
+
+    // 2. Get the screen-space bounding boxes for the view and the point.
+    const viewRect = viewRef.getBoundingClientRect()
+    const pointRect = pointEl.getBoundingClientRect()
+
+    // 3. Calculate the center of the point in screen space.
+    const viewportX = pointRect.left + pointRect.width / 2
+    const viewportY = pointRect.top + pointRect.height / 2
+
+    // 4. Convert the screen-space coordinates to the canvas's local "world" space.
+    const currentCamera = camera()
+    const worldX = (viewportX - viewRect.left) / currentCamera.zoom
+    const worldY = (viewportY - viewRect.top) / currentCamera.zoom
+
+    return { x: worldX, y: worldY }
+  }
 
   const getStageCoordinates = (event: MouseEvent) => {
     if (!stageRef) return { x: 0, y: 0 }
@@ -473,8 +475,6 @@ function StageCanvas(props: { components: StageComponents }) {
     return 'default'
   }
 
-  // NEW: Helper to get world coordinates of a connection point
-
   function onMouseDown(event: MouseEvent) {
     const { x: stageX, y: stageY } = getStageCoordinates(event)
 
@@ -484,14 +484,11 @@ function StageCanvas(props: { components: StageComponents }) {
     }
 
     const target = event.target as HTMLElement
-
     const elementDiv = target.closest('[data-element-id]') as unknown as HTMLElement | null
     const elementIdAttr = elementDiv?.dataset.elementId
     const resizeDir = target.dataset.resizeDir
-    // NEW: Check for connection point clicks
     const connectionType = target.dataset.connectionPoint as 'input' | 'output' | undefined
 
-    // Case 0: A connection point was clicked
     if (connectionType && elementIdAttr && state.elements[elementIdAttr]) {
       event.stopPropagation()
       setDragStart({
@@ -503,7 +500,6 @@ function StageCanvas(props: { components: StageComponents }) {
           connectionType: connectionType,
         },
       })
-      // Case 1: A resize handle was clicked
     } else if (resizeDir && elementIdAttr && state.elements[elementIdAttr]) {
       event.stopPropagation()
       setDragStart({
@@ -516,7 +512,6 @@ function StageCanvas(props: { components: StageComponents }) {
           initialRect: { ...state.elements[elementIdAttr].rect },
         },
       })
-      // Case 2: An element itself was clicked
     } else if (elementIdAttr && state.elements[elementIdAttr]) {
       batch(() => {
         if (!state.selectedElements[clientId]?.includes(elementIdAttr)) {
@@ -536,7 +531,6 @@ function StageCanvas(props: { components: StageComponents }) {
           target: { type: 'elements', initialRects },
         })
       })
-      // Case 3: The background was clicked
     } else {
       setState('selectedElements', clientId, [])
       setDragStart({ stageX, stageY, target: { type: 'stage' } })
@@ -551,9 +545,7 @@ function StageCanvas(props: { components: StageComponents }) {
   function onMouseMove(event: MouseEvent) {
     const { x: stageX, y: stageY } = getStageCoordinates(event)
     setMousePosition({ x: stageX, y: stageY })
-
     if (dragStart()) return
-
     const currentCamera = camera()
     const worldX = (stageX - currentCamera.x) / currentCamera.zoom
     const worldY = (stageY - currentCamera.y) / currentCamera.zoom
@@ -583,7 +575,6 @@ function StageCanvas(props: { components: StageComponents }) {
     const dx = (stageX - dragStartValue.stageX) / currentCamera.zoom
     const dy = (stageY - dragStartValue.stageY) / currentCamera.zoom
 
-    // No changes needed here for connections, handled by reactive rendering
     if (dragStartValue.target.type === 'resize') {
       const { elementId, resizeDir, initialRect } = dragStartValue.target
       if (!elementId || !resizeDir || !initialRect) return
@@ -643,7 +634,6 @@ function StageCanvas(props: { components: StageComponents }) {
 
     const dragStartValue = dragStart()
 
-    // NEW: Logic for finishing a connection
     if (dragStartValue?.target.type === 'connection') {
       const { elementId: fromElementId, connectionType: fromType } = dragStartValue.target
       const target = event.target as HTMLElement
@@ -655,11 +645,10 @@ function StageCanvas(props: { components: StageComponents }) {
         toType &&
         fromElementId &&
         fromType &&
-        fromElementId !== toElementId && // Can't connect to self
-        fromType !== toType // Must be opposite types
+        fromElementId !== toElementId &&
+        fromType !== toType
       ) {
         const newId = createId()
-        // Standardize: 'from' is always output, 'to' is always input
         const from = fromType === 'output' ? fromElementId : toElementId
         const to = fromType === 'input' ? fromElementId : toElementId
 
@@ -699,49 +688,13 @@ function StageCanvas(props: { components: StageComponents }) {
     window.removeEventListener('mouseup', onWindowMouseUp)
   }
 
-  function handleZoom(delta: number, stageX: number, stageY: number) {
-    const currentCamera = camera()
-    const targetZoom = Math.max(0.1, Math.min(currentCamera.zoom * delta, 10))
-
-    if (targetZoom === currentCamera.zoom) return
-
-    gsap.killTweensOf(currentCamera)
-
-    const mouseWorldX = (stageX - currentCamera.x) / currentCamera.zoom
-    const mouseWorldY = (stageY - currentCamera.y) / currentCamera.zoom
-    const targetX = stageX - mouseWorldX * targetZoom
-    const targetY = stageY - mouseWorldY * targetZoom
-
-    gsap.to(currentCamera, {
-      duration: 0.2,
-      ease: 'power2.out',
-      x: targetX,
-      y: targetY,
-      zoom: targetZoom,
-      onUpdate: () => {
-        setCamera({
-          x: currentCamera.x,
-          y: currentCamera.y,
-          zoom: currentCamera.zoom,
-        })
-      },
-    })
-  }
-
   function onWheel(event: WheelEvent) {
     event.preventDefault()
-
-    if (event.ctrlKey || event.metaKey) {
-      const zoomFactor = event.deltaY > 0 ? 1 / 1.1 : 1.1
-      const { x, y } = getStageCoordinates(event)
-      handleZoom(zoomFactor, x, y)
-    } else {
-      setCamera(prev => ({
-        ...prev,
-        x: prev.x - event.deltaX,
-        y: prev.y - event.deltaY,
-      }))
-    }
+    setCamera(prev => ({
+      ...prev,
+      x: prev.x - event.deltaX,
+      y: prev.y - event.deltaY,
+    }))
   }
 
   function onKeyDown(event: KeyboardEvent) {
@@ -749,15 +702,13 @@ function StageCanvas(props: { components: StageComponents }) {
       event.preventDefault()
       setPanning(true)
     }
-
     if ((event.metaKey || event.ctrlKey) && (event.key === '=' || event.key === '-')) {
       event.preventDefault()
-      const zoomDirection = event.key === '=' ? 1.2 : 1 / 1.2
-      const centerOfStage = {
-        x: stageRef!.clientWidth / 2,
-        y: stageRef!.clientHeight / 2,
+      if (event.key === '=') {
+        actions.zoomIn()
+      } else {
+        actions.zoomOut()
       }
-      handleZoom(zoomDirection, centerOfStage.x, centerOfStage.y)
     }
   }
 
@@ -767,12 +718,10 @@ function StageCanvas(props: { components: StageComponents }) {
 
   onMount(() => {
     if (!stageRef) return
-
     setContainerSize({
       width: stageRef.clientWidth,
       height: stageRef.clientHeight,
     })
-
     stageRef.addEventListener('mousedown', onMouseDown)
     stageRef.addEventListener('mousemove', onMouseMove)
     stageRef.addEventListener('keydown', onKeyDown)
@@ -797,7 +746,6 @@ function StageCanvas(props: { components: StageComponents }) {
       tabIndex={0}
       style={{
         ...styles.stage,
-
         cursor:
           dragStart()?.target.type === 'resize'
             ? getResizeCursor(dragStart()?.target.resizeDir)
@@ -827,24 +775,51 @@ function StageCanvas(props: { components: StageComponents }) {
             overflow: 'visible',
           }}
         >
-          {/* NEW: Render permanent connection wires */}
+          {/* Render permanent connection wires */}
           <For each={Object.values(state.connectionWires)}>
             {wire => {
-              const fromCoords = () => getConnectionPointCoords(wire.fromElementId, 'output')
-              const toCoords = () => getConnectionPointCoords(wire.toElementId, 'input')
+              const [fromCoords, setFromCoords] = createSignal<{ x: number; y: number } | null>(
+                null,
+              )
+              const [toCoords, setToCoords] = createSignal<{ x: number; y: number } | null>(null)
+
+              const updateCoords = () => {
+                const from = getConnectionPointCoords(wire.fromElementId, 'output')
+                const to = getConnectionPointCoords(wire.toElementId, 'input')
+                setFromCoords(from)
+                setToCoords(to)
+              }
+
+              createEffect(() => {
+                // values I want to listen for changes on
+                const _ = [
+                  state.elements[wire.fromElementId]?.rect.x,
+                  state.elements[wire.fromElementId]?.rect.y,
+                  state.elements[wire.toElementId]?.rect.x,
+                  state.elements[wire.toElementId]?.rect.y,
+                ]
+
+                // function that I want to run when the values change
+                updateCoords()
+              })
+
+              onMount(() => {
+                updateCoords()
+              })
+
               const path = () => {
                 const from = fromCoords()
                 const to = toCoords()
                 if (!from || !to) return ''
-                return createSCurvePath(from.x, from.y, to.x, to.y)
+                return createDynamicSCurvePath(from.x, from.y, to.x, to.y)
               }
               return <path d={path()} stroke="#64748b" stroke-width="2" fill="none" />
             }}
           </For>
 
-          {/* NEW: Render temporary wire while dragging */}
+          {/* Render temporary wire while dragging */}
           <Show when={dragStart()?.target.type === 'connection'}>
-            <ConnectionWireCursor />
+            <ConnectionCursor getConnectionPointCoords={getConnectionPointCoords} />
           </Show>
         </svg>
 
@@ -891,14 +866,19 @@ function StageCanvas(props: { components: StageComponents }) {
   )
 }
 
-function ConnectionWireCursor() {
-  const { dragStart, mousePosition, camera } = useStage()
+function ConnectionCursor({
+  getConnectionPointCoords,
+}: {
+  getConnectionPointCoords: (
+    elementId: string,
+    type: 'input' | 'output',
+  ) => { x: number; y: number } | null
+}) {
+  const { dragStart, camera, mousePosition } = useStage()
 
   const dragInfo = dragStart()!.target
   const currentCamera = camera()
-
   const fromCoords = () => getConnectionPointCoords(dragInfo.elementId!, dragInfo.connectionType!)
-
   const worldMouseX = () => (mousePosition().x - currentCamera.x) / currentCamera.zoom
   const worldMouseY = () => (mousePosition().y - currentCamera.y) / currentCamera.zoom
 
@@ -912,9 +892,9 @@ function ConnectionWireCursor() {
     const endY = worldMouseY()
 
     if (dragInfo.connectionType === 'output') {
-      return createSCurvePath(startX, startY, endX, endY)
+      return createDynamicSCurvePath(startX, startY, endX, endY)
     } else {
-      return createSCurvePath(endX, endY, startX, startY)
+      return createDynamicSCurvePath(endX, endY, startX, startY)
     }
   }
   return <path d={path()} stroke="#0ea5e9" stroke-width="2" fill="none" />
@@ -998,12 +978,11 @@ export const ElementConnectionPoint: Component<{
           height: '13px',
           'background-color': props.type === 'input' ? 'orange' : 'blue',
           'border-radius': '50%',
-          top: '50%',
           left: props.type === 'input' ? '0px' : '100%',
-          transform: 'translateY(-50%) translateX(-50%)',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
           border: '2px solid black',
           'box-sizing': 'border-box',
-          // NEW: Ensure connection points are always clickable
           'pointer-events': 'all',
           cursor: 'pointer',
         }}
@@ -1024,6 +1003,5 @@ export function createInitialState(elements: UncreatedElementState[]) {
     {} as Record<string, ElementState>,
   )
 
-  // NEW: Include connectionWires in the initial state object
   return { elements: initialState, connectionWires: {} }
 }
