@@ -1,6 +1,6 @@
 import { CanvasElementComponent, createStageContext, Stage, StageContextType } from 'src'
-import ResizePlugin, { ElementTransformControls } from 'plugins/ResizePlugin'
-import ConnectionsPlugin, { ElementConnectionPoint } from 'plugins/ConnectionsPlugin'
+import ResizePlugin, { ElementTransformControls } from '../plugins/ResizePlugin'
+import ConnectionsPlugin, { ElementConnectionPoint } from '../plugins/ConnectionsPlugin'
 import { onMount } from 'solid-js'
 
 const CircleElement: CanvasElementComponent = ({ stage, element, elementId }) => {
