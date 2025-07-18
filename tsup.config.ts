@@ -12,9 +12,11 @@ const preset_options: preset.PresetOptions = {
       dev_entry: true,
     },
     {
+      name: 'ResizePlugin',
       entry: 'src/plugins/ResizePlugin/index.ts',
     },
     {
+      name: 'ConnectionsPlugin',
       entry: 'src/plugins/ConnectionsPlugin/index.tsx',
     },
   ],
