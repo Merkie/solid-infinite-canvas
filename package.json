@@ -40,28 +40,28 @@
         "default": "./dist/index/index.js"
       }
     },
-    "./ConnectionsPlugin": {
-      "solid": "./dist/ConnectionsPlugin/index.jsx",
+    "./plugins/ConnectionsPlugin": {
+      "solid": "./dist/plugins/ConnectionsPlugin/index.jsx",
       "import": {
-        "types": "./dist/ConnectionsPlugin/index.d.ts",
-        "default": "./dist/ConnectionsPlugin/index.js"
+        "types": "./dist/plugins/ConnectionsPlugin/index.d.ts",
+        "default": "./dist/plugins/ConnectionsPlugin/index.js"
       }
     },
-    "./ResizePlugin": {
-      "solid": "./dist/ResizePlugin/index.jsx",
+    "./plugins/ResizePlugin": {
+      "solid": "./dist/plugins/ResizePlugin/index.jsx",
       "import": {
-        "types": "./dist/ResizePlugin/index.d.ts",
-        "default": "./dist/ResizePlugin/index.js"
+        "types": "./dist/plugins/ResizePlugin/index.d.ts",
+        "default": "./dist/plugins/ResizePlugin/index.js"
       }
     }
   },
   "typesVersions": {
     "*": {
-      "ConnectionsPlugin": [
-        "./dist/ConnectionsPlugin/index.d.ts"
+      "plugins/ConnectionsPlugin": [
+        "./dist/plugins/ConnectionsPlugin/index.d.ts"
       ],
-      "ResizePlugin": [
-        "./dist/ResizePlugin/index.d.ts"
+      "plugins/ResizePlugin": [
+        "./dist/plugins/ResizePlugin/index.d.ts"
       ]
     }
   },
