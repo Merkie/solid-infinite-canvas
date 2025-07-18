@@ -1,12 +1,13 @@
-import { onMount } from 'solid-js'
+import { createEffect, createSignal, For, onMount, Show } from 'solid-js'
 import {
+  StagePlugin,
   CanvasElementComponent,
   createStageContext,
   ElementConnectionPoint,
   ElementTransformControls,
   Stage,
   useStage,
-} from 'src'
+} from 'src' // Assuming the core is in index.ts
 
 const CircleElement: CanvasElementComponent = ({ element, elementId }) => {
   const { setState } = useStage()
@@ -98,6 +99,82 @@ const RectangleElement: CanvasElementComponent = ({ element, elementId }) => {
 const stagectx = createStageContext()
 const { actions } = stagectx
 
+const stagectx2 = createStageContext()
+const { actions: actions2 } = stagectx2
+
+type ConnectionWire = {
+  id: string
+  fromElementId: string
+  toElementId: string
+}
+
+const ConnectionsPlugin: StagePlugin = {
+  name: 'connections',
+  components: {
+    viewBack: () => {
+      const { state, dragStart } = useStage()
+
+      return (
+        <svg
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            'pointer-events': 'none',
+            overflow: 'visible',
+          }}
+        >
+          <For each={Object.values(state.ext.connectionWires || {}) as ConnectionWire[]}>
+            {wire => {
+              const [fromCoords, setFromCoords] = createSignal<{ x: number; y: number } | null>(
+                null,
+              )
+              const [toCoords, setToCoords] = createSignal<{ x: number; y: number } | null>(null)
+
+              const updateCoords = () => {
+                const from = getConnectionPointCoords(wire.fromElementId, 'output')
+                const to = getConnectionPointCoords(wire.toElementId, 'input')
+                setFromCoords(from)
+                setToCoords(to)
+              }
+
+              createEffect(() => {
+                // Rerun when element positions change
+                const fromEl = state.elements[wire.fromElementId]
+                const toEl = state.elements[wire.toElementId]
+                if (fromEl) {
+                  const _f = [fromEl.rect.x, fromEl.rect.y, fromEl.rect.width, fromEl.rect.height]
+                }
+                if (toEl) {
+                  const _t = [toEl.rect.x, toEl.rect.y, toEl.rect.width, toEl.rect.height]
+                }
+                updateCoords()
+              })
+
+              onMount(updateCoords)
+
+              const path = () => {
+                const from = fromCoords()
+                const to = toCoords()
+                if (!from || !to) return ''
+                return createDynamicSCurvePath(from.x, from.y, to.x, to.y)
+              }
+              return <path d={path()} stroke="#64748b" stroke-width="2" fill="none" />
+            }}
+          </For>
+
+          {/* Render temporary wire while dragging */}
+          <Show when={dragStart()?.target.type === 'connection'}>
+            <ConnectionCursor />
+          </Show>
+        </svg>
+      )
+    },
+  },
+}
+
 function App() {
   onMount(() => {
     actions.createElement({
@@ -109,6 +186,17 @@ function App() {
       type: 'rectangle',
       rect: { x: 400, y: 200, width: 100, height: 100 },
       props: { color: 'blue', count: 0 },
+    })
+
+    actions2.createElement({
+      type: 'circle',
+      rect: { x: 100, y: 100, width: 100, height: 100 },
+      props: { color: 'orange', count: 0 },
+    })
+    actions2.createElement({
+      type: 'rectangle',
+      rect: { x: 300, y: 300, width: 100, height: 100 },
+      props: { color: 'pink', count: 0 },
     })
   })
 
@@ -159,6 +247,61 @@ function App() {
                 rectangle: RectangleElement,
               },
             }}
+            plugins={[ConnectionsPlugin]}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '10px',
+              right: '10px',
+              display: 'flex',
+              'flex-direction': 'column',
+            }}
+          >
+            <button onClick={() => actions.centerContent({ animate: true })}>Center Content</button>
+            <div
+              style={{
+                display: 'flex',
+                'align-items': 'center',
+                gap: '10px',
+              }}
+            >
+              <button
+                style={{
+                  height: 'fit-content',
+                }}
+                onClick={() => actions.zoomIn()}
+              >
+                +
+              </button>
+              <p>{Math.round(stagectx.camera().zoom * 100)}%</p>
+              <button
+                style={{
+                  height: 'fit-content',
+                }}
+                onClick={() => actions.zoomOut()}
+              >
+                -
+              </button>
+            </div>
+          </div>
+        </div>
+        <div
+          style={{
+            width: '500px',
+            height: '500px',
+            position: 'relative',
+          }}
+        >
+          <Stage
+            context={stagectx2}
+            components={{
+              elements: {
+                circle: CircleElement,
+                rectangle: RectangleElement,
+              },
+            }}
+            plugins={[ConnectionsPlugin]}
           />
           <div
             style={{
@@ -199,6 +342,7 @@ function App() {
         </div>
       </div>
       <button onClick={createRandomElement}>Create Element</button>
+      <pre>{JSON.stringify(stagectx.state, null, 2)}</pre>
     </div>
   )
 }
@@ -224,3 +368,78 @@ function CustomStageBackground() {
 }
 
 export default App
+
+function createDynamicSCurvePath(x1: number, y1: number, x2: number, y2: number): string {
+  const dx = Math.abs(x1 - x2)
+  const dy = Math.abs(y1 - y2)
+
+  // Use a horizontal curve if the connection is mostly horizontal
+  if (dx > dy) {
+    const handleOffset = Math.max(50, dx * 0.4)
+    return `M ${x1} ${y1} C ${x1 + handleOffset} ${y1}, ${x2 - handleOffset} ${y2}, ${x2} ${y2}`
+  }
+  // Otherwise, use a vertical curve
+  else {
+    const handleOffset = Math.max(50, dy * 0.4)
+    return `M ${x1} ${y1} C ${x1} ${y1 + handleOffset}, ${x2} ${y2 - handleOffset}, ${x2} ${y2}`
+  }
+}
+
+function ConnectionCursor() {
+  const { dragStart, camera, mousePosition } = useStage()
+
+  const dragInfo = dragStart()!.target
+  const currentCamera = camera()
+  const fromCoords = () =>
+    getConnectionPointCoords(dragInfo.elementId!, dragInfo.ext?.connectionType!)
+  const worldMouseX = () => (mousePosition().x - currentCamera.x) / currentCamera.zoom
+  const worldMouseY = () => (mousePosition().y - currentCamera.y) / currentCamera.zoom
+
+  const path = () => {
+    const from = fromCoords()
+    if (!from) return ''
+
+    const startX = from.x
+    const startY = from.y
+    const endX = worldMouseX()
+    const endY = worldMouseY()
+
+    if (dragInfo.ext?.connectionType === 'output') {
+      return createDynamicSCurvePath(startX, startY, endX, endY)
+    } else {
+      return createDynamicSCurvePath(endX, endY, startX, startY)
+    }
+  }
+
+  return <path d={path()} stroke="#0ea5e9" stroke-width="2" fill="none" />
+}
+
+function getConnectionPointCoords(
+  elementId: string,
+  type: 'input' | 'output',
+): { x: number; y: number } | null {
+  const { stageId, camera } = useStage()
+
+  const viewElement = document.querySelector(`[data-view-stage-id="${stageId}"]`)
+  if (!viewElement) return null
+
+  // 1. Find the connection point's DOM element using its data attributes.
+  const selector = `[data-element-id="${elementId}"] [data-connection-point="${type}"]`
+  const pointEl = viewElement.querySelector(selector)
+  if (!pointEl) return null
+
+  // 2. Get the screen-space bounding boxes for the view and the point.
+  const viewRect = viewElement.getBoundingClientRect()
+  const pointRect = pointEl.getBoundingClientRect()
+
+  // 3. Calculate the center of the point in screen space.
+  const viewportX = pointRect.left + pointRect.width / 2
+  const viewportY = pointRect.top + pointRect.height / 2
+
+  // 4. Convert the screen-space coordinates to the canvas's local "world" space.
+  const currentCamera = camera()
+  const worldX = (viewportX - viewRect.left) / currentCamera.zoom
+  const worldY = (viewportY - viewRect.top) / currentCamera.zoom
+
+  return { x: worldX, y: worldY }
+}
