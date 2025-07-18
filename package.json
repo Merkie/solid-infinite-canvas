@@ -19,27 +19,46 @@
   "private": false,
   "sideEffects": false,
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index/index.js",
+  "module": "./dist/index/index.js",
+  "types": "./dist/index/index.d.ts",
   "browser": {},
   "exports": {
-    "solid": {
-      "development": "./dist/dev.jsx",
-      "import": "./dist/index.jsx"
-    },
-    "development": {
+    ".": {
+      "development": {
+        "import": {
+          "types": "./dist/index/index.d.ts",
+          "default": "./dist/index/dev.js"
+        }
+      },
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/dev.js"
+        "types": "./dist/index/index.d.ts",
+        "default": "./dist/index/index.js"
       }
     },
-    "import": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+    "./ConnectionsPlugin": {
+      "import": {
+        "types": "./dist/ConnectionsPlugin/index.d.ts",
+        "default": "./dist/ConnectionsPlugin/index.js"
+      }
+    },
+    "./ResizePlugin": {
+      "import": {
+        "types": "./dist/ResizePlugin/index.d.ts",
+        "default": "./dist/ResizePlugin/index.js"
+      }
     }
   },
-  "typesVersions": {},
+  "typesVersions": {
+    "*": {
+      "ConnectionsPlugin": [
+        "./dist/ConnectionsPlugin/index.d.ts"
+      ],
+      "ResizePlugin": [
+        "./dist/ResizePlugin/index.d.ts"
+      ]
+    }
+  },
   "scripts": {
     "dev": "vite serve dev",
     "build": "tsup",
